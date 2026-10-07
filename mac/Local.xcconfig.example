@@ -1,0 +1,9 @@
+// Copy this file to `Local.xcconfig` (git-ignored) and adjust the values to
+// sign the app with your Apple Development identity. A stable signature is
+// required for the Accessibility (TCC) permission grant to survive rebuilds.
+//
+//   cp Local.xcconfig.example Local.xcconfig
+//
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development

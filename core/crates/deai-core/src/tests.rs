@@ -622,6 +622,45 @@ fn en_filler_opener_negative() {
 }
 
 #[test]
+fn en_filler_opener_after_ascii_period() {
+    // `.` ends a sentence, so the opener right after it is a sentence start.
+    let text = "This is an test. It's worth noting that the API is slow.";
+    let f = one(&en(text), "en.filler_opener");
+    assert_eq!(slice(text, &f), "It's worth noting that t");
+    assert_eq!(f.suggestions, vec!["T".to_string()]);
+}
+
+#[test]
+fn period_not_terminator_inside_numbers() {
+    // `3.14` / `v1.2` dots must not split — the opener stays mid-sentence.
+    for text in [
+        "In version 3.14 it's worth noting that the API is slow.",
+        "In v1.2 it's worth noting that the API is slow.",
+    ] {
+        assert!(
+            by_id(&en(text), "en.filler_opener").is_empty(),
+            "{text}: digit-adjacent '.' must not start a sentence"
+        );
+    }
+    // but a period followed by whitespace does split
+    let text = "It's broken. It's worth noting that the API is slow.";
+    assert_eq!(by_id(&en(text), "en.filler_opener").len(), 1);
+}
+
+#[test]
+fn sentence_split_ascii_period_offsets() {
+    let text = "version 3.14 is out. next sentence";
+    let lines = crate::text::lines(text);
+    let sents: Vec<&str> = lines[0]
+        .sentences
+        .iter()
+        .map(|r| &text[r.clone()])
+        .collect();
+    // the `3.14` dot does not split; the sentence-final `. ` does
+    assert_eq!(sents, ["version 3.14 is out.", "next sentence"]);
+}
+
+#[test]
 fn en_stock_phrase() {
     let text = "We delve into the details.";
     let f = one(&en(text), "en.stock_phrase");
@@ -1299,4 +1338,133 @@ fn perf_20k_utf16() {
         non_grammar_ms < 10.0,
         "non-grammar check too slow: {non_grammar_ms} ms"
     );
+}
+
+/// Simulates the app's CheckService pipeline: full-text non-grammar pass plus
+/// per-paragraph grammar checks (ParagraphGrammarRunner on the Swift side
+/// caches by paragraph text; this measures the cold and warm paths).
+#[test]
+#[ignore]
+fn perf_paragraph_pipeline() {
+    let unit = "这是一个用于测试的混合段落，包含顿号、举例，也带 delve into 和 Moreover, 这类词。**加粗**、`代码`、[链接](https://a.com) 都出现。当成本趋近于零时，方向更重要。";
+    for target in [3_000usize, 20_000] {
+        let reps = target / unit.chars().map(|c| c.len_utf16() as u32).sum::<u32>() as usize + 1;
+        let text = std::iter::repeat(unit)
+            .take(reps)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let paras: Vec<&str> = text.split('\n').collect();
+        let checker = Checker::new();
+        let grammar_only = CheckOptions {
+            grammar: true,
+            ai_tone_en: false,
+            ai_tone_zh: false,
+            markdown: false,
+            sensitivity: 3,
+        };
+
+        let t = Instant::now();
+        let _ = checker.check(
+            &text,
+            &CheckOptions {
+                grammar: false,
+                sensitivity: 3,
+                ..Default::default()
+            },
+        );
+        let non_grammar = t.elapsed().as_secs_f64() * 1000.0;
+
+        // cold: every paragraph linted
+        let t = Instant::now();
+        let mut n = 0usize;
+        for p in &paras {
+            n += checker.check(p, &grammar_only).len();
+        }
+        let grammar_cold = t.elapsed().as_secs_f64() * 1000.0;
+
+        // warm-ish: identical paragraphs are cache hits on the Swift side —
+        // one miss + the rest free
+        let t = Instant::now();
+        let n2 = checker.check(paras[0], &grammar_only).len();
+        let grammar_one = t.elapsed().as_secs_f64() * 1000.0;
+
+        println!(
+            "utf16={} paras={}: non-grammar {non_grammar:.2}ms | grammar cold {grammar_cold:.2}ms ({n} findings) | single para {grammar_one:.2}ms ({n2})",
+            text.chars().map(|c| c.len_utf16() as u32).sum::<u32>(),
+            paras.len()
+        );
+    }
+}
+
+/// RSS leak check: 2000 grammar lints of unique paragraphs must not grow
+/// unboundedly (mirrors the app's ParagraphGrammarRunner miss path).
+#[test]
+#[ignore]
+fn mem_paragraph_lints() {
+    fn rss_kb() -> u64 {
+        let out = std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap()
+    }
+    let checker = Checker::new();
+    let opts = CheckOptions {
+        grammar: true,
+        ai_tone_en: false,
+        ai_tone_zh: false,
+        markdown: false,
+        sensitivity: 3,
+    };
+    for i in 0..100 {
+        let _ = checker.check(&format!("para {i}"), &opts);
+    }
+    let before = rss_kb();
+    for i in 0..2000 {
+        let _ = checker.check(&format!("para {i}"), &opts);
+    }
+    let growth = rss_kb() as i64 - before as i64;
+    println!("MEM-LINT: 2000 grammar lints, RSS growth {growth} KiB");
+
+    // same for the non-grammar pass as a control
+    let ng = CheckOptions {
+        grammar: false,
+        sensitivity: 3,
+        ..Default::default()
+    };
+    let before = rss_kb();
+    for _ in 0..2000 {
+        let _ = checker.check("para 这是一个测试段落", &ng);
+    }
+    println!(
+        "MEM-LINT: 2000 non-grammar checks, RSS growth {} KiB",
+        rss_kb() as i64 - before as i64
+    );
+}
+
+#[test]
+#[ignore]
+fn bench_lintgroup_rebuild() {
+    use harper_core::linting::LintGroup;
+    use harper_core::parsers::PlainEnglish;
+    use harper_core::spell::FstDictionary;
+    use harper_core::{Dialect, Document};
+    let dict = FstDictionary::curated();
+    let t = Instant::now();
+    let _ = LintGroup::new_curated(dict, Dialect::American);
+    println!(
+        "LintGroup::new_curated: {:.1} ms",
+        t.elapsed().as_secs_f64() * 1000.0
+    );
+    let t = Instant::now();
+    let _ = FstDictionary::curated();
+    println!(
+        "FstDictionary::curated: {:.1} ms",
+        t.elapsed().as_secs_f64() * 1000.0
+    );
+    let _ = Document::new_curated("warm", &PlainEnglish);
 }

@@ -57,7 +57,7 @@ fn sentences(text: &str, start: usize, end: usize) -> Vec<Range<usize>> {
     let mut sent_start = if i < chars.len() { chars[i].0 } else { end };
     while i < chars.len() {
         let (_, c) = chars[i];
-        if TERMINATORS.contains(&c) {
+        if TERMINATORS.contains(&c) || is_period_terminator(&chars, i) {
             // consume the terminator run, trailing closers, and whitespace
             let mut j = i + 1;
             while j < chars.len()
@@ -80,6 +80,22 @@ fn sentences(text: &str, start: usize, end: usize) -> Vec<Range<usize>> {
         out.push(sent_start..end);
     }
     out
+}
+
+/// A `.` ends a sentence only when followed by whitespace or end of line
+/// and not preceded by a digit — keeps the dots inside `3.14`, `v1.2`,
+/// `e.g.` from splitting.
+fn is_period_terminator(chars: &[(usize, char)], i: usize) -> bool {
+    if chars[i].1 != '.' {
+        return false;
+    }
+    if i > 0 && chars[i - 1].1.is_ascii_digit() {
+        return false;
+    }
+    match chars.get(i + 1) {
+        None => true,
+        Some((_, next)) => next.is_whitespace(),
+    }
 }
 
 /// List-item lines (L1 in RULES.md).

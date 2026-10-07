@@ -12,6 +12,9 @@ targets:
     dependencies:
       - framework: ../core/build/DeAICore.xcframework
         embed: false
+    configFiles:
+      Debug: Config-Debug.xcconfig
+      Release: Config-Release.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.local.deai
@@ -19,7 +22,16 @@ targets:
         INFOPLIST_KEY_LSUIElement: YES
         SWIFT_VERSION: "5.0"
         ENABLE_TESTABILITY: YES
-        CODE_SIGNING_ALLOWED: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGNING_ALLOWED: YES
+      configs:
+        Debug:
+          # Distinct bundle id + name so ad-hoc-signed DerivedData builds never
+          # collide with the installed Release app in TCC's records.
+          PRODUCT_BUNDLE_IDENTIFIER: com.local.deai.debug
+          PRODUCT_NAME: "DeAI Debug"
+          # keep the Swift module name stable — @testable import DeAI
+          PRODUCT_MODULE_NAME: DeAI
   DeAITests:
     type: bundle.unit-test
     platform: macOS
@@ -32,7 +44,7 @@ targets:
       base:
         SWIFT_VERSION: "5.0"
         CODE_SIGNING_ALLOWED: NO
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/DeAI.app/Contents/MacOS/DeAI
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/DeAI Debug.app/Contents/MacOS/DeAI Debug
         BUNDLE_LOADER: $(TEST_HOST)
 schemes:
   DeAI:

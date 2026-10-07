@@ -1,0 +1,9 @@
+// Debug build configuration for the DeAI app target.
+//
+// Always ad-hoc: `xcodebuild test` re-signs XCTest frameworks injected into
+// the host bundle, and signing those with an Apple Development identity fails
+// ("invalid or unsupported format for signature" on .cstemp subcomponents).
+// The real identity only matters for the installed Release app (TCC).
+
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -

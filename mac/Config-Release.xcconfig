@@ -1,0 +1,13 @@
+// Release build configuration for the DeAI app target.
+//
+// Default = ad-hoc signing so a fresh checkout always builds. To sign with a
+// real Apple Development identity (required for a stable TCC/Accessibility
+// grant across rebuilds), create `Local.xcconfig` next to this file — it is
+// git-ignored; see Local.xcconfig.example.
+
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+
+// Optional overrides live in the git-ignored Local.xcconfig. The include must
+// come last so local values win.
+#include? "Local.xcconfig"

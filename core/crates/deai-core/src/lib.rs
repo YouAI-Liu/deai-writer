@@ -3,6 +3,7 @@ mod rules;
 mod text;
 pub mod utf16;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use harper_core::linting::{LintGroup, Linter, Suggestion};
@@ -114,38 +115,84 @@ fn overlaps(a: &Finding, b: &Finding) -> bool {
     a.start < b.end && b.start < a.end
 }
 
+type RuleMap = std::collections::HashMap<&'static str, Vec<&'static str>>;
+
+/// winner rule_id -> loser rule_ids, and loser -> winners, from SUPERSEDES.
+fn supersede_maps() -> (RuleMap, RuleMap) {
+    let mut winners: RuleMap = std::collections::HashMap::new();
+    let mut losers: RuleMap = std::collections::HashMap::new();
+    for &(w, l) in SUPERSEDES {
+        winners.entry(w).or_default().push(l);
+        losers.entry(l).or_default().push(w);
+    }
+    (winners, losers)
+}
+
 /// Dedupe per RULES.md:
 /// 1. same category + identical span -> keep lower tier, then earlier rule
 ///    (`order` = position in the spec table);
 /// 2. overlapping findings survive except the explicit supersede pairs.
+///
+/// O(n log n): after sorting, same-span duplicates are contiguous, and
+/// supersede lookups consult a per-rule index of kept findings instead of
+/// scanning all pairs (the previous O(n^2) version dominated checkMs on
+/// findings-heavy text — see QA 3b perf section).
 fn dedupe(mut items: Vec<(usize, Finding)>) -> Vec<Finding> {
     items.sort_by_key(|(order, f)| (f.start, f.end, f.tier, *order));
-    // identical-span, same category: the sort above puts the winner first
+    let (winners_of, superseded_by) = supersede_maps();
     let mut kept: Vec<(usize, Finding)> = Vec::with_capacity(items.len());
+    let mut dropped: Vec<bool> = Vec::with_capacity(items.len());
+    let mut by_rule: std::collections::HashMap<String, Vec<u32>> = std::collections::HashMap::new();
     for it in items {
-        let dup = kept.iter().any(|(_, a)| {
-            a.category == it.1.category && a.start == it.1.start && a.end == it.1.end
-        });
-        if !dup {
-            kept.push(it);
-        }
-    }
-    // supersede pairs on overlap
-    let mut dropped = vec![false; kept.len()];
-    for i in 0..kept.len() {
-        for j in 0..kept.len() {
-            if i == j || dropped[j] {
-                continue;
+        let f = &it.1;
+        // identical-span, same category: the sort puts same-span items in a
+        // contiguous run (tier, then rule order) — the first occurrence wins
+        let mut dup = false;
+        for k in (0..kept.len()).rev() {
+            let a = &kept[k].1;
+            if a.start != f.start || a.end != f.end {
+                break;
             }
-            let (a, b) = (&kept[i].1, &kept[j].1);
-            if overlaps(a, b)
-                && SUPERSEDES
-                    .iter()
-                    .any(|&(w, l)| w == a.rule_id && l == b.rule_id)
-            {
-                dropped[j] = true;
+            if a.category == f.category {
+                dup = true;
+                break;
             }
         }
+        if dup {
+            continue;
+        }
+        // supersede: only findings whose rule_id pairs with this one can
+        // interact — consult the per-rule index instead of all pairs.
+        // Dropped findings intentionally still participate, matching the
+        // original two-pass semantics.
+        if let Some(losers) = winners_of.get(f.rule_id.as_str()) {
+            for loser in losers {
+                if let Some(idxs) = by_rule.get(*loser) {
+                    for &j in idxs {
+                        if overlaps(&kept[j as usize].1, f) {
+                            dropped[j as usize] = true;
+                        }
+                    }
+                }
+            }
+        }
+        let mut drop_self = false;
+        if let Some(winners) = superseded_by.get(f.rule_id.as_str()) {
+            for winner in winners {
+                if let Some(idxs) = by_rule.get(*winner) {
+                    if idxs.iter().any(|&j| overlaps(&kept[j as usize].1, f)) {
+                        drop_self = true;
+                        break;
+                    }
+                }
+            }
+        }
+        by_rule
+            .entry(f.rule_id.clone())
+            .or_default()
+            .push(kept.len() as u32);
+        kept.push(it);
+        dropped.push(drop_self);
     }
     kept.into_iter()
         .zip(dropped)
@@ -170,6 +217,9 @@ fn run_rules(text: &str, rules: &[Box<dyn Rule>]) -> Vec<(usize, Finding)> {
 pub struct Checker {
     /// harper's `Linter::lint` takes `&mut self`.
     linter: Mutex<LintGroup>,
+    /// Grammar calls made; used to rebuild the `LintGroup` periodically (see
+    /// `grammar_findings`).
+    lint_calls: AtomicU64,
     rules: Vec<Box<dyn Rule>>,
 }
 
@@ -184,6 +234,7 @@ impl Checker {
         let dict = FstDictionary::curated();
         let checker = Self {
             linter: Mutex::new(LintGroup::new_curated(dict, Dialect::American)),
+            lint_calls: AtomicU64::new(0),
             rules: rules::all(),
         };
         // Compile every rule regex once here (LazyLock defers compilation to
@@ -238,10 +289,22 @@ impl Checker {
         findings
     }
 
+    /// harper's `LintGroup` keeps per-chunk and per-sentence LRU caches of
+    /// `BTreeMap<rule, Vec<Lint>>` keyed by content hash (hardcoded 1000
+    /// entries each) — ~40+ KiB of retained data per unique paragraph. With
+    /// no API to clear or size them, the only way to bound memory is to
+    /// rebuild the group periodically (~70 ms, amortized over
+    /// `LINT_REBUILD_EVERY` calls).
+    const LINT_REBUILD_EVERY: u64 = 250;
+
     fn grammar_findings(&self, text: &str, map: &Utf16Map) -> Vec<Finding> {
         let doc = Document::new_curated(text, &PlainEnglish);
         let source: Vec<char> = text.chars().collect();
         let mut linter = self.linter.lock().unwrap();
+        let n = self.lint_calls.fetch_add(1, Ordering::Relaxed) + 1;
+        if n.is_multiple_of(Self::LINT_REBUILD_EVERY) {
+            *linter = LintGroup::new_curated(FstDictionary::curated(), Dialect::American);
+        }
         linter
             .lint(&doc)
             .into_iter()
