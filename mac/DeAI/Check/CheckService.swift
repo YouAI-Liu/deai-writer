@@ -16,14 +16,23 @@ enum FindingFilter {
     ) -> [Finding] {
         let utf16 = Array(text.utf16)
         return findings.filter { f in
+            let kind: CheckKind
             switch f.category {
-            case .grammar: guard settings.grammar else { return false }
-            case .aiToneEn: guard settings.aiToneEn else { return false }
-            case .aiToneZh: guard settings.aiToneZh else { return false }
+            case .grammar:
+                kind = .grammar
+                guard settings.grammar else { return false }
+            case .aiToneEn:
+                kind = .aiToneEn
+                guard settings.aiToneEn else { return false }
+            case .aiToneZh:
+                kind = .aiToneZh
+                guard settings.aiToneZh else { return false }
             case .markdown:
-                guard settings.markdown, settings.markdownEnabled(for: bundleId)
-                else { return false }
+                kind = .markdown
+                guard settings.markdown else { return false }
             }
+            // group check selection (+ per-app markdown narrowing)
+            guard settings.isCheckEnabled(kind, for: bundleId) else { return false }
             if settings.disabledRuleIds.contains(f.ruleId) { return false }
             let s = Int(f.start)
             let e = min(Int(f.end), utf16.count)

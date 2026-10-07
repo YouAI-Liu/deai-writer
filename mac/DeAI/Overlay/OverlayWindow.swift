@@ -10,6 +10,14 @@ final class OverlayWindow {
     private var panels: [NSScreen: (panel: NSPanel, view: UnderlineView)] = [:]
     private(set) var rendered: [PositionedFinding] = []
 
+    /// Pushed into every `UnderlineView`; a change repaints existing
+    /// underlines without re-checking.
+    var appearance: UnderlineAppearance = .default {
+        didSet {
+            for (_, entry) in panels { entry.view.underlineAppearance = appearance }
+        }
+    }
+
     /// Redraw underlines for `items` (screen-space Cocoa rects).
     /// Returns hit-rects in screen coordinates for click handling.
     @discardableResult
@@ -62,6 +70,53 @@ final class OverlayWindow {
         }
     }
 
+    /// Debug/QA: render each panel's underline view to PNG files plus a
+    /// `manifest.json` (panel frames + item counts) inside `dir`.
+    /// Own-window rendering — needs no screen-recording permission.
+    func dumpPanelImages(to dir: URL) {
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true
+        )
+        var manifest: [[String: Any]] = []
+        for (i, (screen, entry)) in panels.enumerated() {
+            let view = entry.view
+            let size = view.bounds.size
+            guard size.width > 0, size.height > 0,
+                  let rep = NSBitmapImageRep(
+                      bitmapDataPlanes: nil,
+                      pixelsWide: Int(size.width),
+                      pixelsHigh: Int(size.height),
+                      bitsPerSample: 8,
+                      samplesPerPixel: 4,
+                      hasAlpha: true,
+                      isPlanar: false,
+                      colorSpaceName: .deviceRGB,
+                      bytesPerRow: 0,
+                      bitsPerPixel: 0
+                  ),
+                  let ctx = NSGraphicsContext(bitmapImageRep: rep)?.cgContext
+            else { continue }
+            // flip so the PNG matches top-down screen orientation
+            ctx.translateBy(x: 0, y: size.height)
+            ctx.scaleBy(x: 1, y: -1)
+            view.layer?.render(in: ctx)
+            let url = dir.appendingPathComponent("panel-\(i).png")
+            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+            manifest.append([
+                "panel": i,
+                "screenFrame": [
+                    screen.frame.origin.x, screen.frame.origin.y,
+                    screen.frame.width, screen.frame.height,
+                ],
+            ])
+        }
+        if let data = try? JSONSerialization.data(
+            withJSONObject: manifest, options: [.prettyPrinted]
+        ) {
+            try? data.write(to: dir.appendingPathComponent("manifest.json"))
+        }
+    }
+
     private func panel(for screen: NSScreen) -> (panel: NSPanel, view: UnderlineView) {
         if let existing = panels[screen] {
             if existing.panel.frame != screen.frame {
@@ -86,6 +141,7 @@ final class OverlayWindow {
         ]
         panel.isReleasedWhenClosed = false
         let view = UnderlineView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        view.underlineAppearance = appearance
         panel.contentView = view
         panels[screen] = (panel, view)
         return (panel, view)

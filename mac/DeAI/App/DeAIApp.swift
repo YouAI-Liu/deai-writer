@@ -53,11 +53,30 @@ private struct MenuContent: View {
                 controller.toggleCurrentApp()
             }
         }
+        Menu("应用类型") {
+            ForEach(AppGroup.allCases, id: \.self) { group in
+                Toggle(group.displayName, isOn: groupBinding(group))
+            }
+        }
         Divider()
         Button("设置…") { controller.showSettingsWindow() }
         Button("调试：规则测试窗口") { openWindow(id: "debug") }
         Divider()
         Button("退出") { NSApp.terminate(nil) }
+    }
+
+    private func groupBinding(_ group: AppGroup) -> Binding<Bool> {
+        Binding(
+            get: {
+                (settings.groupRules[group] ?? AppGroup.defaultRule(for: group)).enabled
+            },
+            set: { enabled in
+                var rule = settings.groupRules[group]
+                    ?? AppGroup.defaultRule(for: group)
+                rule.enabled = enabled
+                settings.groupRules[group] = rule
+            }
+        )
     }
 
     private func appName(_ bundleId: String) -> String {

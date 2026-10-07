@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 @testable import DeAI
 
@@ -76,6 +78,18 @@ final class DeAITests: XCTestCase {
         XCTAssertEqual(ids(1), ["zh.banned_opener"])
         XCTAssertEqual(ids(2), ["zh.banned_opener", "zh.dash"])
         XCTAssertEqual(ids(3), ["zh.banned_opener", "zh.dash", "zh.fanan_loose"])
+    }
+
+    /// The exact text used for the live overlay QA screenshots — sanity
+    /// check that it really triggers markdown + zh + grammar findings.
+    func testLiveQATextFindings() {
+        let checker = Checker()
+        let text = "说白了，这是一个**粗体**示例。值得注意的是，我们需要赋能。 This is an test."
+        let findings = checker.check(text: text, opts: options())
+        print("LIVE-QA findings:", findings.map { "\($0.category)/\($0.ruleId)" })
+        XCTAssertTrue(findings.contains { $0.category == .markdown })
+        XCTAssertTrue(findings.contains { $0.category == .aiToneZh })
+        XCTAssertTrue(findings.contains { $0.category == .grammar })
     }
 
     func testStripMarkdown() {
@@ -549,6 +563,13 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertFalse(s.isAppEnabled("com.apple.Terminal"))
         XCTAssertFalse(s.isAppEnabled("com.1password.1password"))
         XCTAssertFalse(s.isAppEnabled("com.local.deai"))
+        // the whole com.local.deai[.*] family is excluded — Debug and
+        // Release builds must ignore each other even via an explicit AppRule
+        XCTAssertFalse(s.isAppEnabled("com.local.deai.debug"))
+        s.appRules["com.local.deai"] = AppRule(enabled: true, markdown: true)
+        XCTAssertFalse(s.isAppEnabled("com.local.deai"))
+        // but the prefix must not overmatch unrelated ids
+        XCTAssertTrue(s.isAppEnabled("com.local.deaix"))
         // own-app exclusion follows the live bundle id (debug id in tests)
         if let own = Bundle.main.bundleIdentifier {
             XCTAssertFalse(s.isAppEnabled(own))
@@ -560,8 +581,11 @@ final class AppSettingsTests: XCTestCase {
     func testDefaultsMarkdownOffApps() {
         let (s, _) = fresh()
         XCTAssertFalse(s.markdownEnabled(for: "com.microsoft.VSCode"))
-        XCTAssertFalse(s.markdownEnabled(for: "md.obsidian"))
+        // Cursor is a code editor → markdown off by default too
+        XCTAssertFalse(s.markdownEnabled(for: "com.todesktop.230313mzl4w4u92"))
         XCTAssertTrue(s.markdownEnabled(for: "com.apple.TextEdit"))
+        // Obsidian sits in 笔记 (notes), which keeps markdown on by default
+        XCTAssertTrue(s.markdownEnabled(for: "md.obsidian"))
     }
 
     func testAppRuleOverrides() {
@@ -601,6 +625,235 @@ final class AppSettingsTests: XCTestCase {
         s1.autoUnderline = true
         let s2 = AppSettings(userDefaults: ud)
         XCTAssertTrue(s2.sessionIgnored.isEmpty)
+    }
+
+    /// Settings written by an older build (only the 8 original keys) must
+    /// decode — preserved values plus defaults for the new fields, not a
+    /// wholesale reset.
+    func testOldFormatJSONDecodes() {
+        let ud = UserDefaults(suiteName: "test.\(UUID().uuidString)")!
+        let oldJSON = """
+            {
+              "autoUnderline": false,
+              "grammar": false,
+              "aiToneZh": true,
+              "aiToneEn": false,
+              "markdown": true,
+              "sensitivity": 3,
+              "disabledRuleIds": ["zh.dash"],
+              "appRules": {"com.example.App": {"enabled": false, "markdown": true}}
+            }
+            """
+        ud.set(oldJSON.data(using: .utf8)!, forKey: AppSettings.defaultsKey)
+        let s = AppSettings(userDefaults: ud)
+        XCTAssertFalse(s.autoUnderline)
+        XCTAssertFalse(s.grammar)
+        XCTAssertTrue(s.aiToneZh)
+        XCTAssertFalse(s.aiToneEn)
+        XCTAssertTrue(s.markdown)
+        XCTAssertEqual(s.sensitivity, 3)
+        XCTAssertEqual(s.disabledRuleIds, ["zh.dash"])
+        XCTAssertEqual(s.appRules["com.example.App"], AppRule(enabled: false, markdown: true))
+        // new fields fall back to defaults
+        XCTAssertEqual(s.underline, .default)
+        XCTAssertEqual(s.groupRules, AppGroup.defaultRules)
+    }
+
+    func testUnderlineAndGroupRulesRoundTrip() {
+        let (s1, ud) = fresh()
+        var appearance = s1.underline
+        appearance.styles["grammar"] = UnderlineStyle(colorHex: "#00FF00", shape: .dotted)
+        appearance.thickness = 2.5
+        appearance.opacity = 0.7
+        appearance.offset = 3
+        appearance.dimLowConfidence = false
+        appearance.highlightFill = true
+        s1.underline = appearance
+
+        var officeRule = s1.groupRules[.office]!
+        officeRule.checks.remove(.aiToneZh)
+        s1.groupRules[.office] = officeRule
+        var browserRule = s1.groupRules[.browser]!
+        browserRule.enabled = true
+        s1.groupRules[.browser] = browserRule
+
+        let s2 = AppSettings(userDefaults: ud)
+        XCTAssertEqual(s2.underline, appearance)
+        XCTAssertEqual(s2.groupRules[.office]?.checks.contains(.aiToneZh), false)
+        XCTAssertEqual(s2.groupRules[.browser]?.enabled, true)
+    }
+
+    func testGroupForBundleId() {
+        XCTAssertEqual(AppGroup.group(for: "com.microsoft.Word"), .office)
+        XCTAssertEqual(AppGroup.group(for: "com.apple.Safari"), .browser)
+        // JetBrains prefix rule
+        XCTAssertEqual(AppGroup.group(for: "com.jetbrains.intellij"), .code)
+        XCTAssertEqual(AppGroup.group(for: "com.jetbrains.CLion"), .code)
+        XCTAssertEqual(AppGroup.group(for: "com.example.foo"), .other)
+    }
+
+    func testGroupDefaults() {
+        let (s, _) = fresh()
+        // browsers + sensitive off; notes on
+        XCTAssertFalse(s.isAppEnabled("com.google.Chrome"))
+        XCTAssertFalse(s.isAppEnabled("com.apple.Safari"))
+        XCTAssertFalse(s.isAppEnabled("com.apple.Terminal"))
+        XCTAssertTrue(s.isAppEnabled("com.apple.TextEdit"))
+        // code group: all checks except markdown
+        let vscode = s.checkOptions(for: "com.microsoft.VSCode")
+        XCTAssertTrue(vscode.grammar)
+        XCTAssertTrue(vscode.aiToneZh)
+        XCTAssertTrue(vscode.aiToneEn)
+        XCTAssertFalse(vscode.markdown)
+    }
+
+    /// A per-app AppRule.enabled overrides a disabled group; group-level
+    /// check removal applies to every app in the group but not others.
+    func testPerAppOverridesGroupAndCheckNarrowing() {
+        let (s, _) = fresh()
+        // browser group is disabled by default; a per-app rule re-enables it
+        s.appRules["com.google.Chrome"] = AppRule(enabled: true, markdown: true)
+        XCTAssertTrue(s.isAppEnabled("com.google.Chrome"))
+
+        // turn off aiToneZh for the office group
+        var office = s.groupRules[.office]!
+        office.checks.remove(.aiToneZh)
+        s.groupRules[.office] = office
+
+        XCTAssertFalse(s.checkOptions(for: "com.microsoft.Word").aiToneZh)
+        XCTAssertTrue(s.checkOptions(for: "com.apple.TextEdit").aiToneZh)
+    }
+
+    /// Per-app markdown override can only narrow: enabling it on an app
+    /// whose group lacks markdown does NOT re-enable the check.
+    func testPerAppMarkdownCannotWiden() {
+        let (s, _) = fresh()
+        s.appRules["com.microsoft.VSCode"] = AppRule(enabled: true, markdown: true)
+        XCTAssertFalse(s.markdownEnabled(for: "com.microsoft.VSCode"))
+        // and narrowing works the other way
+        s.appRules["com.apple.TextEdit"] = AppRule(enabled: true, markdown: false)
+        XCTAssertFalse(s.markdownEnabled(for: "com.apple.TextEdit"))
+    }
+
+    func testNewAppRuleMarkdownFollowsGroup() {
+        let (s, _) = fresh()
+        // code group lacks markdown → new exception defaults markdown off
+        s.setAppEnabled("com.microsoft.VSCode", true)
+        XCTAssertEqual(s.appRules["com.microsoft.VSCode"]?.markdown, false)
+        // notes group has markdown → defaults on
+        s.setAppEnabled("com.apple.TextEdit", true)
+        XCTAssertEqual(s.appRules["com.apple.TextEdit"]?.markdown, true)
+    }
+}
+
+// MARK: - UnderlineAppearance
+
+final class UnderlineAppearanceTests: XCTestCase {
+    /// The default appearance must reproduce the pre-settings colors/shapes.
+    func testDefaultMatchesOldLook() {
+        let d = UnderlineAppearance.default
+        XCTAssertEqual(d.style(for: .grammar).colorHex, "#E5484D")
+        XCTAssertEqual(d.style(for: .grammar).shape, .wavy)
+        XCTAssertEqual(d.style(for: .aiToneZh).colorHex, "#8E4EC6")
+        XCTAssertEqual(d.style(for: .aiToneZh).shape, .straight)
+        XCTAssertEqual(d.style(for: .aiToneEn).colorHex, "#0090FF")
+        XCTAssertEqual(d.style(for: .markdown).colorHex, "#8B8D98")
+        XCTAssertEqual(d.thickness, 1.2)
+        XCTAssertEqual(d.opacity, 1)
+        XCTAssertEqual(d.offset, 1)
+        XCTAssertTrue(d.dimLowConfidence)
+        XCTAssertFalse(d.highlightFill)
+    }
+
+    /// Default offset (1) must put the line exactly where the old code did:
+    /// rect.minY + 1.
+    func testDefaultOffsetReproducesOldY() {
+        let rect = CGRect(x: 0, y: 100, width: 50, height: 14)
+        XCTAssertEqual(
+            UnderlineDrawing.underlineY(rect: rect, offset: 1),
+            rect.minY + 1
+        )
+        XCTAssertEqual(
+            UnderlineDrawing.underlineY(rect: rect, offset: -2),
+            rect.minY + 4
+        )
+    }
+
+    /// style(for:) falls back to the default for missing/foreign keys.
+    func testStyleFallback() {
+        var a = UnderlineAppearance.default
+        a.styles = ["grammar": UnderlineStyle(colorHex: "#000000", shape: .dotted)]
+        XCTAssertEqual(a.style(for: .grammar).colorHex, "#000000")
+        XCTAssertEqual(a.style(for: .markdown).colorHex, "#8B8D98")
+    }
+
+    func testHexRoundTrip() {
+        for hex in ["#E5484D", "#0090FF", "8B8D98", "#000000", "#FFFFFF"] {
+            let color = NSColor(hex: hex)
+            XCTAssertNotNil(color, hex)
+            let normalized = hex.hasPrefix("#") ? hex : "#\(hex)"
+            XCTAssertEqual(color?.hexString, normalized.uppercased())
+        }
+        XCTAssertNil(NSColor(hex: "#XYZXYZ"))
+        XCTAssertNil(NSColor(hex: "#FFF"))
+    }
+}
+
+// MARK: - settings window screenshots (renders each tab to /tmp)
+
+final class SettingsScreenshotTests: XCTestCase {
+    /// Retained for the whole test run — letting the hosting windows
+    /// deallocate inside the test scope crashes XCTest's memory checker.
+    private static var liveWindows: [NSWindow] = []
+
+    func testRenderSettingsTabs() throws {
+        // Opt-in: the normal suite must not write /tmp files or pin windows.
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["DEAI_SCREENSHOTS"] == "1",
+            "set DEAI_SCREENSHOTS=1 to render settings-tab PNGs to /tmp"
+        )
+        let work = {
+            let settings = AppSettings(
+                userDefaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!
+            )
+            for (tab, name) in [(0, "checks"), (1, "underline"), (2, "apps")] {
+                let hosting = NSHostingView(
+                    rootView: SettingsView(settings: settings, initialTab: tab)
+                )
+                let window = NSWindow(
+                    contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
+                    styleMask: [.titled],
+                    backing: .buffered,
+                    defer: false
+                )
+                window.isReleasedWhenClosed = false
+                window.contentView = hosting
+                window.orderFront(nil)
+                window.display()
+                hosting.layoutSubtreeIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+                hosting.layoutSubtreeIfNeeded()
+
+                let bounds = hosting.bounds
+                let rep = hosting.bitmapImageRepForCachingDisplay(in: bounds)
+                XCTAssertNotNil(rep)
+                if let rep {
+                    hosting.cacheDisplay(in: bounds, to: rep)
+                    let png = rep.representation(using: .png, properties: [:])
+                    XCTAssertNotNil(png)
+                    let url = URL(fileURLWithPath: "/tmp/deai-settings-\(name).png")
+                    try? png?.write(to: url)
+                    XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+                }
+                window.orderOut(nil)
+                Self.liveWindows.append(window)
+            }
+        }
+        if Thread.isMainThread {
+            try work()
+        } else {
+            try DispatchQueue.main.sync(execute: work)
+        }
     }
 }
 
