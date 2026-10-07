@@ -66,6 +66,14 @@ public struct GroupRule: Codable, Equatable {
 }
 
 public extension AppGroup {
+    /// Groups the user may toggle. `.sensitive` is a hard exclusion list —
+    /// terminals, password managers and DeAI itself are never served, so it
+    /// is hidden from every UI and `isAppEnabled` always returns false for
+    /// it regardless of saved group rules or per-app overrides.
+    static var configurable: [AppGroup] {
+        allCases.filter { $0 != .sensitive }
+    }
+
     /// Defaults: browsers are covered by the Chrome extension and
     /// terminals/password managers are sensitive — both start disabled.
     /// Code editors skip the markdown-residue check (they legitimately hold

@@ -225,6 +225,10 @@ public final class AppSettings: ObservableObject {
         if bundleId == "com.local.deai" || bundleId.hasPrefix("com.local.deai.") {
             return false
         }
+        // .sensitive is a hard exclusion list: terminals, password managers
+        // etc. are never served, no matter the saved group rule or a
+        // per-app override
+        if AppGroup.group(for: bundleId) == .sensitive { return false }
         if let rule = appRules[bundleId] { return rule.enabled }
         return groupRule(for: bundleId).enabled
     }

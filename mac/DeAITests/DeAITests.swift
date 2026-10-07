@@ -989,6 +989,35 @@ final class AppSettingsTests: XCTestCase {
         s.setAppEnabled("com.apple.TextEdit", true)
         XCTAssertEqual(s.appRules["com.apple.TextEdit"]?.markdown, true)
     }
+
+    /// .sensitive is a hard exclusion list: enabling its group rule AND a
+    /// per-app override still cannot turn a terminal/password app on.
+    func testSensitiveAppsStayDisabled() {
+        let (s, _) = fresh()
+        s.groupRules[.sensitive] = GroupRule(
+            enabled: true, checks: Set(CheckKind.allCases)
+        )
+        for id in [
+            "com.apple.Terminal",
+            "com.googlecode.iterm2",
+            "dev.warp.Warp-Stable",
+            "com.apple.keychainaccess",
+            "com.1password.1password",
+        ] {
+            s.setAppEnabled(id, true)
+            XCTAssertFalse(s.isAppEnabled(id), "\(id) must stay disabled")
+        }
+    }
+
+    /// `.sensitive` is hidden from every group list in the UI.
+    func testConfigurableExcludesSensitive() {
+        XCTAssertFalse(AppGroup.configurable.contains(.sensitive))
+        XCTAssertEqual(
+            AppGroup.configurable,
+            AppGroup.allCases.filter { $0 != .sensitive }
+        )
+        XCTAssertEqual(AppGroup.configurable.count, AppGroup.allCases.count - 1)
+    }
 }
 
 // MARK: - UnderlineAppearance

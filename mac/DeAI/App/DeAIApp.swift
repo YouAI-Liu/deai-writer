@@ -69,7 +69,10 @@ struct MenuContent: View {
             }
             Toggle("自动下划线", isOn: $settings.autoUnderline)
                 .toggleStyle(DeAIToggleStyle())
-            if let bundleId = controller.frontmostBundleId {
+            // sensitive apps (terminals, password managers) are hard-excluded
+            // — a toggle there would be a no-op, so hide the row entirely
+            if let bundleId = controller.frontmostBundleId,
+               AppGroup.group(for: bundleId) != .sensitive {
                 Toggle(isOn: Binding(
                     get: { settings.isAppEnabled(bundleId) },
                     set: { on in
@@ -101,7 +104,7 @@ struct MenuContent: View {
             .buttonStyle(.plain)
             if groupsExpanded {
                 VStack(spacing: 12) {
-                    ForEach(AppGroup.allCases, id: \.self) { group in
+                    ForEach(AppGroup.configurable, id: \.self) { group in
                         Toggle(group.displayName, isOn: groupBinding(group))
                             .toggleStyle(DeAIToggleStyle())
                     }

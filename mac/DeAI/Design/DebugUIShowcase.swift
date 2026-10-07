@@ -340,8 +340,9 @@ final class DebugUICapture {
             try await save("settings")
             scrollToBottom(in: window.contentView)
             try await save("settings-rules")
-            // 应用类型 section mid-scroll: browser/sensitive groups are
-            // disabled by default, showing the dimmed chip style
+            // 应用类型 section mid-scroll: the browser group is disabled by
+            // default, showing the dimmed chip style; the hard-excluded
+            // .sensitive group no longer appears at all
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
                  size: NSSize(width: 560, height: 660))
             scrollTo(fraction: 0.42, in: window.contentView)

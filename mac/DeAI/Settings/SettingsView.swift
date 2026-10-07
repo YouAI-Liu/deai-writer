@@ -126,7 +126,7 @@ private struct CheckSettingsTab: View {
             }
             SettingsSection("应用类型") {
                 VStack(alignment: .leading, spacing: 16) {
-                    ForEach(AppGroup.allCases, id: \.self) { group in
+                    ForEach(AppGroup.configurable, id: \.self) { group in
                         let rule = settings.groupRules[group]
                             ?? AppGroup.defaultRule(for: group)
                         VStack(alignment: .leading, spacing: 10) {
