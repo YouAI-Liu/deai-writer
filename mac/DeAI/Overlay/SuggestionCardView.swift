@@ -89,7 +89,7 @@ struct SuggestionCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius))
         .overlay {
             RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius)
-                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
+                .strokeBorder(DeAIDesign.componentOutline, lineWidth: 0.5)
         }
         .foregroundStyle(DeAIDesign.paper)
         .font(DeAIDesign.font())

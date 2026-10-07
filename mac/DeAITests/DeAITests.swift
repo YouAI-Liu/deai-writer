@@ -1020,3 +1020,55 @@ final class SuggestionCardPanelTests: XCTestCase {
         XCTAssertEqual(card.current?.matchedText.count, 1600)
     }
 }
+
+final class UnderlineAppearanceTests: XCTestCase {
+    private func luminance(_ color: NSColor) -> Double {
+        let color = color.usingColorSpace(.sRGB)!
+        func linear(_ value: CGFloat) -> Double {
+            let value = Double(value)
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(color.redComponent) + 0.7152 * linear(color.greenComponent)
+            + 0.0722 * linear(color.blueComponent)
+    }
+
+    func testEveryCategoryMeetsContrastInBothAppearances() {
+        let backgrounds: [(NSAppearance.Name, [NSColor])] = [
+            (.aqua, [.white, NSColor(srgbRed: 236 / 255, green: 235 / 255, blue: 232 / 255, alpha: 1)]),
+            (.darkAqua, [NSColor(srgbRed: 30 / 255, green: 30 / 255, blue: 30 / 255, alpha: 1),
+                         NSColor(srgbRed: 43 / 255, green: 43 / 255, blue: 43 / 255, alpha: 1)])
+        ]
+        for (name, backgrounds) in backgrounds {
+            for category in [Category.grammar, .aiToneZh, .aiToneEn, .markdown] {
+                let foreground = luminance(DeAIDesign.underlineColor(for: category, appearance: NSAppearance(named: name)!))
+                for background in backgrounds {
+                    let background = luminance(background)
+                    let contrast = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+                    XCTAssertGreaterThanOrEqual(contrast, 3, "\(name): \(category)")
+                }
+            }
+        }
+    }
+
+    func testAppearanceChangeRecolorsVisibleLayerWithoutChangingGeometry() {
+        let original = NSApp.appearance
+        defer { NSApp.appearance = original }
+        NSApp.appearance = NSAppearance(named: .aqua)
+        let view = UnderlineView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        view.render([PositionedFinding(
+            finding: Finding(category: .aiToneEn, ruleId: "test", message: "", start: 0, end: 1,
+                             suggestions: [], tier: 1),
+            rects: [CGRect(x: 10, y: 20, width: 100, height: 12)]
+        )])
+        let layer = view.layer!.sublayers!.first as! CAShapeLayer
+        let path = layer.path
+        let hits = view.hitRects().map(\.0)
+        XCTAssertEqual(layer.strokeColor, DeAIDesign.underlineColor(for: .aiToneEn, appearance: NSAppearance(named: .aqua)).cgColor)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        XCTAssertTrue(view.layer!.sublayers!.first === layer)
+        XCTAssertEqual(layer.strokeColor, DeAIDesign.underlineColor(for: .aiToneEn, appearance: NSAppearance(named: .darkAqua)).cgColor)
+        XCTAssertEqual(layer.path, path)
+        XCTAssertEqual(view.hitRects().map(\.0), hits)
+        XCTAssertEqual(layer.lineWidth, 1.4)
+    }
+}

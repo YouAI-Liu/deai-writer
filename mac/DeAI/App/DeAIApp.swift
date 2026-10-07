@@ -96,6 +96,10 @@ struct MenuContent: View {
         .foregroundStyle(DeAIDesign.paper)
         .padding(24).frame(width: 300)
         .background(DeAIDesign.ink, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+        .overlay {
+            RoundedRectangle(cornerRadius: DeAIDesign.radius)
+                .strokeBorder(DeAIDesign.componentOutline, lineWidth: 0.5)
+        }
         .preferredColorScheme(.dark)
     }
 

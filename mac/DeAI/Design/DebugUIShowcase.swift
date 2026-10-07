@@ -21,7 +21,7 @@ struct DebugUIShowcase: View {
             HStack(spacing: 20) {
                 ForEach(["建议", "设置", "权限", "规则窗口", "下划线"], id: \.self) { title in
                     Button(title) { page = title }.buttonStyle(.plain)
-                        .foregroundStyle(page == title ? DeAIDesign.ink : DeAIDesign.muted)
+                        .foregroundStyle(page == title ? DeAIDesign.text : DeAIDesign.muted)
                 }
                 Spacer()
             }
@@ -40,7 +40,6 @@ struct DebugUIShowcase: View {
         }
         .frame(width: 760, height: 790)
         .background(DeAIDesign.canvas)
-        .preferredColorScheme(.light)
         .onAppear {
             model.onApply = { _, completion in
                 applications += 1
@@ -60,7 +59,7 @@ struct DebugUIShowcase: View {
                     .padding(.top, 64)
             }
             .frame(maxWidth: .infinity).frame(height: 410)
-            .background(darkHost ? DeAIDesign.ink.opacity(0.9) : DeAIDesign.canvas)
+            .background(darkHost ? DeAIDesign.darkHost : DeAIDesign.canvas)
             HStack(spacing: 12) {
                 Button("待处理") { reset() }
                 Button("应用中") { reset(); model.phase = .loading }
@@ -114,24 +113,27 @@ private struct DebugUnderlineColors: View {
             ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(sample.1).font(DeAIDesign.font(13))
-                    DebugUnderlineSample(category: sample.0).frame(width: 240, height: 10)
+                    DebugUnderlineSample(category: sample.0, dark: dark).frame(width: 240, height: 10)
                 }
             }
         }
         .padding(30).frame(width: 310, height: 400, alignment: .topLeading)
         .foregroundStyle(dark ? DeAIDesign.paper : DeAIDesign.ink)
-        .background(dark ? Color(red: 0.18, green: 0.18, blue: 0.18) : DeAIDesign.canvas)
+        .background(dark ? DeAIDesign.darkHost : DeAIDesign.canvas)
+        .environment(\.colorScheme, dark ? .dark : .light)
     }
 }
 
 private struct DebugUnderlineSample: NSViewRepresentable {
     let category: Category
+    let dark: Bool
 
     func makeNSView(context: Context) -> UnderlineView {
         UnderlineView(frame: .zero)
     }
 
     func updateNSView(_ view: UnderlineView, context: Context) {
+        view.previewAppearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         view.render([
             PositionedFinding(
                 finding: Finding(category: category, ruleId: "", message: "", start: 0, end: 1,
@@ -188,8 +190,9 @@ final class DebugUICapture {
         Task { await capture.run() }
     }
 
-    private func show<V: View>(_ view: V, size: NSSize) {
-        window.contentView = NSHostingView(rootView: view)
+    private func show<V: View>(_ view: V, size: NSSize, dark: Bool = false) {
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light))
         window.setContentSize(size)
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -201,7 +204,7 @@ final class DebugUICapture {
             .environment(\.deaiReducedMotionOverride, reduced ? true : nil)
             .padding(.top, 74)
             .frame(width: 620, height: 500)
-            .background(dark ? Color(red: 0.18, green: 0.18, blue: 0.18) : DeAIDesign.canvas)
+            .background(dark ? DeAIDesign.darkHost : DeAIDesign.canvas)
     }
 
     private func save(_ name: String, after delay: Double = 0.6) async throws {
@@ -272,6 +275,20 @@ final class DebugUICapture {
             try await save("menu")
             show(ContentView(), size: NSSize(width: 700, height: 620))
             try await save("rule-window", after: 0.6)
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
+                 size: NSSize(width: 540, height: 700), dark: true)
+            try await save("settings-dark")
+            show(PermissionView(), size: NSSize(width: 420, height: 360), dark: true)
+            try await save("permission-dark")
+            show(ContentView(), size: NSSize(width: 700, height: 620), dark: true)
+            try await save("rule-window-dark")
+            model.update(
+                finding: Finding(category: .markdown, ruleId: "md.bold", message: "Markdown 残留：加粗",
+                                 start: 0, end: 6, suggestions: ["粗体"], tier: 1),
+                matchedText: "**粗体**"
+            )
+            show(card(dark: true), size: NSSize(width: 620, height: 500), dark: true)
+            try await save("card-dark-mode")
             print("UI capture complete")
         } catch {
             print("UI capture failed: \(error)")

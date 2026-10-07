@@ -20,19 +20,40 @@ struct DeAIReducedMotion: DynamicProperty {
 }
 
 enum DeAIDesign {
-    static let canvas = Color(red: 236 / 255, green: 235 / 255, blue: 232 / 255)
-    static let ink = Color(red: 17 / 255, green: 17 / 255, blue: 17 / 255)
-    static let paper = Color(red: 250 / 255, green: 250 / 255, blue: 248 / 255)
-    static let muted = Color(red: 108 / 255, green: 107 / 255, blue: 103 / 255)
+    // Fixed colors for the suggestion card and menu panel.
+    static let ink = Color(nsColor: rgb(0x111111))
+    static let paper = Color(nsColor: rgb(0xFAFAF8))
+    static let canvas = adaptive("canvas", light: rgb(0xECEBE8), dark: rgb(0x161615))
+    static let surface = adaptive("surface", light: rgb(0xFAFAF8), dark: rgb(0x1F1F1E))
+    static let text = adaptive("text", light: rgb(0x111111), dark: rgb(0xFAFAF8))
+    static let muted = adaptive("muted", light: rgb(0x6C6B67), dark: NSColor.white.withAlphaComponent(0.6))
+    static let controlBackground = adaptive("controlBackground", light: rgb(0x111111), dark: rgb(0xFAFAF8))
+    static let controlForeground = adaptive("controlForeground", light: rgb(0xFAFAF8), dark: rgb(0x111111))
+    static let inactiveTrack = adaptive("inactiveTrack", light: rgb(0x111111).withAlphaComponent(0.15), dark: NSColor.white.withAlphaComponent(0.2))
+    static let componentOutline = Color.white.opacity(0.10)
+    static let darkHost = Color(nsColor: rgb(0x2B2B2B))
     static let radius: CGFloat = 24
     static let contentDuration = 0.15
 
-    static func underlineColor(for category: Category) -> NSColor {
+    private static func rgb(_ hex: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255,
+                green: CGFloat((hex >> 8) & 255) / 255,
+                blue: CGFloat(hex & 255) / 255, alpha: 1)
+    }
+
+    private static func adaptive(_ name: String, light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: NSColor.Name("DeAI." + name)) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    static func underlineColor(for category: Category, appearance: NSAppearance? = nil) -> NSColor {
+        let dark = (appearance ?? NSApp.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         switch category {
-        case .grammar: NSColor(srgbRed: 170 / 255, green: 105 / 255, blue: 112 / 255, alpha: 1)
-        case .aiToneZh: NSColor(srgbRed: 141 / 255, green: 118 / 255, blue: 159 / 255, alpha: 1)
-        case .aiToneEn: NSColor(srgbRed: 94 / 255, green: 133 / 255, blue: 159 / 255, alpha: 1)
-        case .markdown: NSColor(srgbRed: 130 / 255, green: 132 / 255, blue: 127 / 255, alpha: 1)
+        case .grammar: return rgb(dark ? 0xC98D93 : 0xAA6970)
+        case .aiToneZh: return rgb(dark ? 0xB69FC8 : 0x8D769F)
+        case .aiToneEn: return rgb(dark ? 0x8FB3CB : 0x5E859F)
+        case .markdown: return rgb(dark ? 0xAFB1AB : 0x82847F)
         }
     }
 
@@ -87,8 +108,8 @@ struct DeAIButtonStyle: ButtonStyle {
             .font(DeAIDesign.font(12, weight: .medium))
             .padding(.horizontal, compact ? 12 : 18)
             .padding(.vertical, compact ? 8 : 12)
-            .foregroundStyle(inverted ? DeAIDesign.ink : DeAIDesign.paper)
-            .background(inverted ? DeAIDesign.paper : DeAIDesign.ink, in: Capsule())
+            .foregroundStyle(inverted ? DeAIDesign.ink : DeAIDesign.controlForeground)
+            .background(inverted ? DeAIDesign.paper : DeAIDesign.controlBackground, in: Capsule())
             .opacity(configuration.isPressed ? 0.72 : 1)
             .animation(DeAIDesign.motion(reduceMotion), value: configuration.isPressed)
     }
@@ -106,10 +127,10 @@ struct DeAIToggleStyle: ToggleStyle {
                 configuration.isOn.toggle()
             } label: {
                 Capsule()
-                    .fill(configuration.isOn ? (inverted ? DeAIDesign.paper : DeAIDesign.ink) : (inverted ? Color.white.opacity(0.2) : DeAIDesign.ink.opacity(0.15)))
+                    .fill(configuration.isOn ? (inverted ? DeAIDesign.paper : DeAIDesign.controlBackground) : (inverted ? Color.white.opacity(0.2) : DeAIDesign.inactiveTrack))
                     .frame(width: 38, height: 23)
                     .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                        Circle().fill(inverted ? DeAIDesign.ink : DeAIDesign.paper)
+                        Circle().fill(inverted ? DeAIDesign.ink : DeAIDesign.controlForeground)
                             .frame(width: 17, height: 17).padding(3)
                     }
             }
@@ -138,13 +159,13 @@ struct SensitivityControl: View {
                     Text(title)
                         .font(DeAIDesign.font(12, weight: .medium))
                         .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .foregroundStyle(selection == index + 1 ? DeAIDesign.ink : DeAIDesign.paper)
+                        .foregroundStyle(selection == index + 1 ? DeAIDesign.controlBackground : DeAIDesign.controlForeground)
                         .background {
                             if selection == index + 1 {
                                 if reduceMotion {
-                                    Capsule().fill(DeAIDesign.paper).transition(.opacity)
+                                    Capsule().fill(DeAIDesign.controlForeground).transition(.opacity)
                                 } else {
-                                    Capsule().fill(DeAIDesign.paper)
+                                    Capsule().fill(DeAIDesign.controlForeground)
                                         .matchedGeometryEffect(id: "selection", in: highlight)
                                 }
                             }
@@ -156,6 +177,6 @@ struct SensitivityControl: View {
             }
         }
         .padding(5)
-        .background(DeAIDesign.ink, in: Capsule())
+        .background(DeAIDesign.controlBackground, in: Capsule())
     }
 }

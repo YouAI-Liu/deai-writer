@@ -89,9 +89,8 @@ struct SettingsView: View {
             .padding(30)
         }
         .font(DeAIDesign.font())
-        .foregroundStyle(DeAIDesign.ink)
+        .foregroundStyle(DeAIDesign.text)
         .background(DeAIDesign.canvas)
-        .preferredColorScheme(.light)
         .frame(width: 540, height: 700)
     }
 
@@ -99,7 +98,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title).font(DeAIDesign.font(12, weight: .medium))
             content().padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(DeAIDesign.paper, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+                .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
         }
     }
 

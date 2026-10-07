@@ -25,7 +25,7 @@ struct ContentView: View {
             TextEditor(text: $text)
                 .font(DeAIDesign.font(15)).scrollContentBackground(.hidden)
                 .padding(16).frame(minHeight: 140)
-                .background(DeAIDesign.paper, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+                .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
             HStack(spacing: 20) {
                 Toggle("语法", isOn: $grammar)
                 Toggle("英文 AI 腔", isOn: $aiToneEn)
@@ -59,15 +59,14 @@ struct ContentView: View {
                             }
                         }
                         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(DeAIDesign.paper, in: RoundedRectangle(cornerRadius: 20))
+                        .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: 20))
                     }
                 }
             }
         }
         .padding(30)
-        .foregroundStyle(DeAIDesign.ink)
+        .foregroundStyle(DeAIDesign.text)
         .background(DeAIDesign.canvas)
-        .preferredColorScheme(.light)
         .frame(minWidth: 700, minHeight: 620)
         .onAppear(perform: schedule)
         .onChange(of: text) { _, _ in schedule() }
