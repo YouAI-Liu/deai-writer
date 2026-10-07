@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon
 import Combine
 import OSLog
 import SwiftUI
@@ -226,6 +227,10 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                 scheduleCheck(key, now: true)
             }
         }
+        // A re-resolve (e.g. the post-scroll Word re-resolve) can arrive when
+        // no text changed — the check cache then delivers no result, so this
+        // is also the only re-measure that corrects stale underline rects.
+        repositionAll()
     }
 
     func focusTextMayHaveChanged(_ target: TextTarget) {
@@ -244,7 +249,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             scheduleCheck(key)
             return
         }
-        handleTextRead(key: key, current: current)
+        // Unchanged text (arrows/PageUp scroll the viewport without touching
+        // AXValue): the underline rects may still have moved — re-measure.
+        if handleTextRead(key: key, current: current) {
+            repositionAll()
+        }
     }
 
     func focusSelectionMayHaveChanged(_ target: TextTarget) {
@@ -304,11 +313,94 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         repositionAll()
     }
 
+    private var scrollRemeasureItem: DispatchWorkItem?
+    private var scrollConfirmItem: DispatchWorkItem?
+    /// During a scroll burst every render path must hide instead of draw —
+    /// late AX notifications / check completions otherwise re-draw stale
+    /// underlines between scroll events (BUG: overlay visible mid-scroll).
+    private var scrollSuppressedUntil = CFAbsoluteTime(0)
+
+    /// Suppression predicate for the scroll window (pure — unit-tested).
+    static func scrollSuppressed(
+        now: CFAbsoluteTime, until: CFAbsoluteTime
+    ) -> Bool {
+        now < until
+    }
+
+    /// Scroll: bounds read at event time are pre-scroll (Word and
+    /// momentum scrolling redraw after the event). Hide underlines like
+    /// the typing path does, then re-measure 120 ms after the last event
+    /// and once more at 400 ms for late redraws.
+    func focusScrolled() {
+        scrollSuppressedUntil = CFAbsoluteTimeGetCurrent() + 0.12
+        scrollRemeasureItem?.cancel()
+        scrollConfirmItem?.cancel()
+        overlay.hideAll()
+        clickMonitor.setHitRects([])
+        let remeasure = DispatchWorkItem { [weak self] in
+            // the trailing remeasure clears suppression and draws
+            self?.scrollSuppressedUntil = 0
+            self?.repositionAll()
+        }
+        scrollRemeasureItem = remeasure
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: remeasure)
+        let confirm = DispatchWorkItem { [weak self] in
+            self?.repositionAll()
+        }
+        scrollConfirmItem = confirm
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: confirm)
+    }
+
+    /// Safety tick: element/window frames don't move on scroll, so instead
+    /// re-measure one drawn finding per target and re-render when it
+    /// drifted — catches any stale-rect path without a full re-check.
+    func focusSafetyTick() {
+        let winFrame = focusedWindowFrameAX()
+        for (_, state) in states {
+            guard let sample = state.positioned.first, !sample.rects.isEmpty
+            else { continue }
+            let fresh = TextGeometry.position(
+                findings: [sample.finding],
+                element: state.target.element,
+                primaryMaxY: primaryMaxY,
+                baseOffset: state.target.baseOffset,
+                viewportAX: state.target.element.viewportFrame(
+                    windowFrame: winFrame
+                ),
+                maxFindings: 1
+            ).first?.rects ?? []
+            if Self.rectsMoved(sample.rects, fresh) {
+                repositionAll()
+                return
+            }
+        }
+    }
+
+    /// True when two rect lists differ by more than `tolerance` in any
+    /// component — safety-tick drift predicate.
+    static func rectsMoved(
+        _ a: [CGRect], _ b: [CGRect], tolerance: CGFloat = 1
+    ) -> Bool {
+        guard a.count == b.count else { return true }
+        for (r1, r2) in zip(a, b) {
+            if abs(r1.minX - r2.minX) > tolerance
+                || abs(r1.minY - r2.minY) > tolerance
+                || abs(r1.width - r2.width) > tolerance
+                || abs(r1.height - r2.height) > tolerance {
+                return true
+            }
+        }
+        return false
+    }
+
     func focusLost() {
         for key in states.keys { checkService.invalidate(tag: key) }
         states = [:]
         lastCarets = [:]
-        frontmostBundleId = nil
+        // Keep tracking the frontmost app even when it is not served
+        // (disabled app/group): the menu must still offer "在 X 中启用"
+        // (BUG-02 — previously nil hid the current-app row entirely).
+        frontmostBundleId = tracker.currentApp?.bundleIdentifier
         cardContext = nil
         overlay.hideAll()
         card.dismiss()
@@ -388,6 +480,15 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     private func repositionAll() {
+        // suppressed during a scroll burst — nothing may re-draw stale
+        // underlines until the trailing re-measure clears the window
+        if Self.scrollSuppressed(
+            now: CFAbsoluteTimeGetCurrent(), until: scrollSuppressedUntil
+        ) {
+            overlay.hideAll()
+            clickMonitor.setHitRects([])
+            return
+        }
         let t0 = CFAbsoluteTimeGetCurrent()
         let winFrame = focusedWindowFrameAX()
         for key in states.keys {
@@ -423,6 +524,14 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     private func render() {
+        // same suppression as repositionAll for callers that draw directly
+        if Self.scrollSuppressed(
+            now: CFAbsoluteTimeGetCurrent(), until: scrollSuppressedUntil
+        ) {
+            overlay.hideAll()
+            clickMonitor.setHitRects([])
+            return
+        }
         let t0 = CFAbsoluteTimeGetCurrent()
         overlay.appearance = settings.underline
         guard settings.autoUnderline else {
@@ -461,6 +570,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             return
         }
         guard let (key, state) = state(for: item) else { return }
+        TextReplacer.dbgLog("showCard key=\(key) \(item.finding.ruleId) [\(item.finding.start),\(item.finding.end))")
         let finding = item.finding
         let utf16 = Array(state.text.utf16)
         let s = Int(finding.start)
@@ -520,6 +630,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         completion: ((Bool) -> Void)? = nil
     ) {
         guard let state = states[key] else { completion?(false); return }
+        TextReplacer.dbgLog("applyReplacement key=\(key) \(finding.ruleId) [\(finding.start),\(finding.end)) repl=\(replacement) matched=\(matched)")
         TextReplacer.apply(
             element: state.target.element,
             finding: finding,
@@ -530,6 +641,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         ) { [weak self] result in
             // completion arrives after the write is verified (pasteboard and
             // delete-key paths poll the element's text; BUG-11)
+            TextReplacer.dbgLog("applyReplacement completion path=\(result.path) success=\(result.success)")
             completion?(result.success)
             self?.lastReplacement = (result.path.rawValue, result.success)
             self?.writeDebugState()
@@ -539,8 +651,25 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
 
     // MARK: - AI rewrite
 
+    /// Registration failure shown under the shortcut recorder (nil = ok).
+    @Published private(set) var hotkeyError: String?
+
     private func applyHotkeySetting() {
-        hotkey.set(settings.rewriteHotkey.spec)
+        switch hotkey.set(settings.rewriteHotkey.spec) {
+        case noErr:
+            hotkeyError = nil
+        case OSStatus(eventHotKeyExistsErr):
+            hotkeyError = "该快捷键已被其他应用占用，请换一个"
+        case let status:
+            hotkeyError = "快捷键注册失败（错误 \(status)）"
+        }
+    }
+
+    /// The shortcut recorder unregisters the global hotkey while capturing
+    /// (so pressing the current combo can't fire a rewrite) and re-applies
+    /// the setting when done.
+    func setHotkeyPaused(_ paused: Bool) {
+        if paused { hotkey.unregister() } else { applyHotkeySetting() }
     }
 
     /// Card button path: rewrite the paragraph containing the finding.
@@ -845,7 +974,8 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         window.contentView = NSHostingView(
             rootView: SettingsView(
                 settings: settings,
-                currentBundleId: tracker.currentApp?.bundleIdentifier
+                currentBundleId: tracker.currentApp?.bundleIdentifier,
+                controller: self
             )
         )
         window.center()

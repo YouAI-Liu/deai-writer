@@ -17,7 +17,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
                 Text("规则测试")
-                    .font(DeAIDesign.font(26, weight: .semibold)).tracking(-0.8)
+                    .font(DeAIDesign.titleFont(26)).tracking(-0.8)
                 Spacer()
                 Text("\(findings.count) 条提示")
                     .font(DeAIDesign.font(11)).foregroundStyle(DeAIDesign.muted)
@@ -59,14 +59,14 @@ struct ContentView: View {
                             }
                         }
                         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: 20))
+                        .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
                     }
                 }
             }
         }
         .padding(30)
         .foregroundStyle(DeAIDesign.text)
-        .background(DeAIDesign.canvas)
+        .background(DeAIDesign.background)
         .frame(minWidth: 700, minHeight: 620)
         .onAppear(perform: schedule)
         .onChange(of: text) { _, _ in schedule() }

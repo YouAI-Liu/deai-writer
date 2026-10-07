@@ -155,25 +155,25 @@ struct RewritePanelView: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(DeAIDesign.muted)
                 .accessibilityLabel("关闭")
             }
             switch model.phase {
             case .loading:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("AI 改写中…").foregroundStyle(.white.opacity(0.55))
+                    Text("AI 改写中…").foregroundStyle(DeAIDesign.muted)
                     Spacer()
                     Button("取消") { model.onCancel() }
                 }
             case .result:
                 labeled("原文", text: model.original, muted: true)
-                Rectangle().fill(.white.opacity(0.10)).frame(height: 0.5)
+                Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
                 labeled("改写", text: model.result, muted: false)
                 HStack(spacing: 16) {
                     Button("替换") { model.onAccept() }
                         .keyboardShortcut(.defaultAction)
-                        .buttonStyle(DeAIButtonStyle(inverted: true))
+                        .buttonStyle(DeAIButtonStyle(compact: true))
                     Button("复制") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(
@@ -186,16 +186,16 @@ struct RewritePanelView: View {
                 }
                 .font(DeAIDesign.font(11))
                 .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(DeAIDesign.muted)
             case .error:
                 Text(model.errorMessage)
                     .font(DeAIDesign.font(12))
-                    .foregroundStyle(.red.opacity(0.9))
+                    .foregroundStyle(DeAIDesign.danger)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 16) {
                     if model.showOpenSettings {
                         Button("打开设置") { model.onOpenSettings() }
-                            .buttonStyle(DeAIButtonStyle(inverted: true))
+                            .buttonStyle(DeAIButtonStyle(compact: true))
                     }
                     if model.canRetry {
                         Button("重试") { model.onRetry() }
@@ -205,29 +205,28 @@ struct RewritePanelView: View {
                 }
                 .font(DeAIDesign.font(11))
                 .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(DeAIDesign.muted)
             case .noChange:
                 Text("没有需要修改的地方")
                     .font(DeAIDesign.font(12))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(DeAIDesign.muted)
                 HStack {
                     Spacer()
                     Button("关闭") { model.onCancel() }
-                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                 }
             }
         }
         .padding(22)
         .frame(width: 420)
-        .background(DeAIDesign.ink, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+        .background(DeAIDesign.background, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
         .clipShape(RoundedRectangle(cornerRadius: DeAIDesign.radius))
         .overlay {
             RoundedRectangle(cornerRadius: DeAIDesign.radius)
-                .strokeBorder(DeAIDesign.componentOutline, lineWidth: 0.5)
+                .strokeBorder(DeAIDesign.border, lineWidth: 0.5)
         }
-        .foregroundStyle(DeAIDesign.paper)
+        .foregroundStyle(DeAIDesign.text)
         .font(DeAIDesign.font())
-        .colorScheme(.dark)
         .onExitCommand { model.onCancel() }
     }
 
@@ -235,11 +234,11 @@ struct RewritePanelView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(DeAIDesign.font(10))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(DeAIDesign.muted)
             ScrollView {
                 Text(text)
                     .font(DeAIDesign.font(13))
-                    .foregroundStyle(muted ? .white.opacity(0.55) : DeAIDesign.paper)
+                    .foregroundStyle(muted ? DeAIDesign.secondaryText : DeAIDesign.text)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

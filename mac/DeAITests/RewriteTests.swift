@@ -1,3 +1,5 @@
+import AppKit
+import Carbon
 import Foundation
 import XCTest
 @testable import DeAI
@@ -496,7 +498,7 @@ final class SettingsMigrationTests: XCTestCase {
         XCTAssertEqual(s.providers.count, 1)
         XCTAssertEqual(s.providers.first?.preset, .opencodeGo)
         XCTAssertEqual(s.activeProviderId, s.providers.first?.id)
-        XCTAssertEqual(s.rewriteHotkey, .ctrlOptR)
+        XCTAssertEqual(s.rewriteHotkey, .default)
     }
 
     func testProvidersRoundTrip() {
@@ -523,5 +525,116 @@ final class SettingsMigrationTests: XCTestCase {
         XCTAssertEqual(m.get("p1"), "abc")
         m.set(nil, for: "p1")
         XCTAssertNil(m.get("p1"))
+    }
+}
+
+// MARK: - RewriteHotkey (recorded shortcut)
+
+final class RewriteHotkeyTests: XCTestCase {
+    private let ctrlOpt = UInt32(controlKey | optionKey)
+    private let cmd = UInt32(cmdKey)
+    private let cmdShift = UInt32(cmdKey | shiftKey)
+
+    // legacy preset strings still decode to the same combos
+    func testLegacyStringDecode() throws {
+        func dec(_ s: String) throws -> RewriteHotkey {
+            try JSONDecoder().decode(RewriteHotkey.self, from: Data("\"\(s)\"".utf8))
+        }
+        func spec(_ s: String) throws -> (UInt32, UInt32) {
+            try XCTUnwrap(dec(s).spec.map { ($0.keyCode, $0.modifiers) })
+        }
+        XCTAssertTrue(try spec("ctrlOptR") == (UInt32(kVK_ANSI_R), ctrlOpt))
+        XCTAssertTrue(try spec("ctrlOptE") == (UInt32(kVK_ANSI_E), ctrlOpt))
+        XCTAssertTrue(
+            try spec("optCmdJ") == (UInt32(kVK_ANSI_J), UInt32(optionKey | cmdKey))
+        )
+        XCTAssertEqual(try dec("off"), .off)
+        XCTAssertEqual(try dec("whatever"), .default)
+    }
+
+    /// settings JSON with no hotkey key at all → default
+    func testMissingKeyDecodesDefault() throws {
+        let json = """
+            {"autoUnderline":true,"grammar":true,"aiToneZh":true,
+             "aiToneEn":true,"markdown":true,"sensitivity":2,
+             "disabledRuleIds":[],"appRules":{}}
+            """
+        let ud = UserDefaults(suiteName: "hk.\(UUID().uuidString)")!
+        ud.set(Data(json.utf8), forKey: AppSettings.defaultsKey)
+        let s = AppSettings(userDefaults: ud, secrets: InMemorySecretStore())
+        XCTAssertEqual(s.rewriteHotkey, .default)
+    }
+
+    /// keyed-object round trip, including the off state (keyCode omitted)
+    func testKeyedRoundTrip() throws {
+        let combo = RewriteHotkey(keyCode: UInt32(kVK_ANSI_K), modifiers: cmdShift)
+        let data = try JSONEncoder().encode(combo)
+        XCTAssertEqual(try JSONDecoder().decode(RewriteHotkey.self, from: data), combo)
+        let off = try JSONDecoder().decode(
+            RewriteHotkey.self, from: JSONEncoder().encode(RewriteHotkey.off)
+        )
+        XCTAssertEqual(off, .off)
+        XCTAssertNil(off.spec)
+    }
+
+    func testLabels() {
+        XCTAssertEqual(
+            RewriteHotkey(keyCode: UInt32(kVK_ANSI_R), modifiers: ctrlOpt).label,
+            "⌃⌥ R"
+        )
+        XCTAssertEqual(
+            RewriteHotkey(keyCode: UInt32(kVK_ANSI_K), modifiers: cmdShift).label,
+            "⇧⌘ K"
+        )
+        XCTAssertEqual(
+            RewriteHotkey(keyCode: UInt32(kVK_F5), modifiers: 0).label, "F5"
+        )
+        XCTAssertEqual(
+            RewriteHotkey(
+                keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey)
+            ).label,
+            "⌥ Space"
+        )
+        XCTAssertEqual(RewriteHotkey.off.label, "未设置")
+    }
+
+    func testValidate() {
+        XCTAssertEqual(
+            RewriteHotkey.validate(keyCode: UInt32(kVK_ANSI_R), modifiers: 0),
+            .needsModifier
+        )
+        XCTAssertEqual(
+            RewriteHotkey.validate(
+                keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(shiftKey)
+            ),
+            .needsModifier
+        )
+        XCTAssertEqual(
+            RewriteHotkey.validate(
+                keyCode: UInt32(kVK_ANSI_Q), modifiers: cmd
+            ),
+            .reserved
+        )
+        XCTAssertEqual(
+            RewriteHotkey.validate(
+                keyCode: UInt32(kVK_ANSI_R), modifiers: ctrlOpt
+            ),
+            .ok
+        )
+        // function keys need no modifier
+        XCTAssertEqual(
+            RewriteHotkey.validate(keyCode: UInt32(kVK_F6), modifiers: 0), .ok
+        )
+    }
+
+    func testCarbonModifiersFromNSEvent() {
+        XCTAssertEqual(RewriteHotkey.carbonModifiers([.control, .option]), ctrlOpt)
+        XCTAssertEqual(RewriteHotkey.carbonModifiers([.command, .shift]), cmdShift)
+        XCTAssertEqual(RewriteHotkey.carbonModifiers([]), 0)
+        // device-dependent bits don't leak into the mask
+        XCTAssertEqual(
+            RewriteHotkey.carbonModifiers([.option, .capsLock]),
+            UInt32(optionKey)
+        )
     }
 }

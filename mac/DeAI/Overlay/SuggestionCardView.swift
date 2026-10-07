@@ -40,7 +40,11 @@ final class SuggestionCardModel: ObservableObject {
     }
 
     func apply(_ replacement: String) {
-        guard !applicationStarted else { return }
+        guard !applicationStarted else {
+            TextReplacer.dbgLog("card.apply BLOCKED (already started) repl=\(replacement)")
+            return
+        }
+        TextReplacer.dbgLog("card.apply repl=\(replacement)")
         applicationStarted = true
         selectedReplacement = replacement
         phase = .loading
@@ -70,6 +74,17 @@ struct SuggestionCardView: View {
         model.phase == .success || model.phase == .failure
     }
 
+    /// The category's underline color resolved for the card's current
+    /// appearance (the card follows the system appearance now).
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var categoryColor: Color {
+        Color(nsColor: DeAIDesign.underlineColor(
+            for: model.finding.category,
+            appearance: NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
+        ))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Group {
@@ -84,22 +99,21 @@ struct SuggestionCardView: View {
             .id(compact)
             .transition(DeAIDesign.contentTransition(reduceMotion).animation(.easeOut(duration: 0.15)))
         }
-        .padding(compact ? 18 : 22)
-        .frame(width: compact ? 270 : 356, alignment: .leading)
-        .background(DeAIDesign.ink, in: RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius))
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius))
+        .padding(compact ? 12 : 14)
+        .frame(width: compact ? 190 : 260, alignment: .leading)
+        .background(DeAIDesign.background, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+        .clipShape(RoundedRectangle(cornerRadius: DeAIDesign.radius))
         .overlay {
-            RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius)
-                .strokeBorder(DeAIDesign.componentOutline, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DeAIDesign.radius)
+                .strokeBorder(DeAIDesign.border, lineWidth: 0.5)
         }
-        .foregroundStyle(DeAIDesign.paper)
+        .foregroundStyle(DeAIDesign.text)
         .font(DeAIDesign.font())
-        .colorScheme(.dark)
         .opacity(model.visible ? 1 : 0)
         .scaleEffect(reduceMotion || model.visible ? 1 : 0.96, anchor: .top)
         .animation(reduceMotion ? nil : DeAIDesign.motion(false), value: compact)
         .animation(DeAIDesign.motion(reduceMotion), value: model.visible)
-        .frame(width: 356, alignment: .topLeading)
+        .frame(width: 300, alignment: .topLeading)
         .frame(maxHeight: .infinity, alignment: .top)
         .onAppear { model.visible = true }
         .onExitCommand { model.onDismiss() }
@@ -114,107 +128,199 @@ struct SuggestionCardView: View {
         }
     }
 
+    // MARK: - editor
+
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 12) {
-                Text(verbatim: model.finding.message)
-                    .font(DeAIDesign.font(16, weight: .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                tag
+                Spacer(minLength: 0)
                 Button { model.onDismiss() } label: {
-                    Image(systemName: "xmark").font(DeAIDesign.font(11, weight: .medium))
-                        .frame(width: 24, height: 24)
+                    Image(systemName: "xmark")
+                        .font(DeAIDesign.font(9, weight: .semibold))
+                        .frame(width: 20, height: 20)
                 }
-                .buttonStyle(.plain).foregroundStyle(.white.opacity(0.5))
+                .buttonStyle(.plain)
+                .foregroundStyle(DeAIDesign.muted)
                 .accessibilityLabel("关闭建议")
             }
-            comparisons
-            Rectangle().fill(.white.opacity(0.10)).frame(height: 0.5)
-            HStack(spacing: 16) {
-                Button("AI 改写") { model.onRewrite() }
-                    .help("让 AI 改写这一段")
-                Spacer(minLength: 0)
-                Button("忽略") { model.onIgnore() }
-                Button("停用规则") { model.onDisableRule() }
-            }
-            .font(DeAIDesign.font(11)).buttonStyle(.plain)
-            .foregroundStyle(.white.opacity(0.6))
-            .disabled(model.applicationStarted)
+            suggestions
+            iconRow
         }
     }
 
-    private var comparisons: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if !model.matchedText.isEmpty {
-                comparison("原文", text: model.matchedText, muted: true)
-            }
+    /// Small capsule tag: category dot + name; the finding's full message is
+    /// the tooltip / part of the card's accessibility label, not body text.
+    private var tag: some View {
+        HStack(spacing: 5) {
+            Circle().fill(categoryColor).frame(width: 6, height: 6)
+            Text(model.finding.category.displayName)
+        }
+        .font(DeAIDesign.font(10, weight: .medium))
+        .foregroundStyle(DeAIDesign.muted)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(DeAIDesign.sidebar, in: Capsule())
+        .help(model.finding.message)
+        .accessibilityLabel(
+            "\(model.finding.category.displayName)：\(model.finding.message)"
+        )
+    }
+
+    private var suggestions: some View {
+        VStack(alignment: .leading, spacing: 8) {
             if case let .diff(result) = model.phase {
                 if !result.isEmpty {
-                    comparison("改写", text: result, muted: false)
-                    applyButton(result)
+                    suggestionRow(result)
                 }
             } else {
-                ForEach(Array(model.finding.suggestions.enumerated()), id: \.offset) { _, suggestion in
-                    if !suggestion.isEmpty { comparison("建议", text: suggestion, muted: false) }
-                    applyButton(suggestion)
+                ForEach(
+                    Array(model.finding.suggestions.enumerated()), id: \.offset
+                ) { _, suggestion in
+                    if suggestion.isEmpty {
+                        deletionRow
+                    } else {
+                        suggestionRow(suggestion)
+                    }
                 }
             }
         }
     }
 
-    private func comparison(_ label: String, text: String, muted: Bool) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Text(label).font(DeAIDesign.font(10)).foregroundStyle(.white.opacity(0.4))
-                .frame(width: 24, alignment: .leading).padding(.top, 2)
-            Text(verbatim: text)
-                .font(DeAIDesign.font(13, weight: .regular))
-                .foregroundStyle(muted ? .white.opacity(0.55) : DeAIDesign.paper)
+    /// Bold suggestion text; tapping the row applies it.
+    private func suggestionRow(_ suggestion: String) -> some View {
+        Button { model.apply(suggestion) } label: {
+            Text(verbatim: suggestion)
+                .font(DeAIDesign.font(15, weight: .bold))
+                .foregroundStyle(DeAIDesign.text)
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.applicationStarted)
+        .accessibilityLabel("替换为：\(suggestion)")
+    }
+
+    /// Empty suggestion = delete: matched text struck through + 删除 caption.
+    private var deletionRow: some View {
+        Button { model.apply("") } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(verbatim: model.matchedText)
+                    .font(DeAIDesign.font(15, weight: .bold))
+                    .strikethrough()
+                    .foregroundStyle(DeAIDesign.muted)
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("删除")
+                    .font(DeAIDesign.font(10))
+                    .foregroundStyle(DeAIDesign.muted.opacity(0.8))
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.applicationStarted)
+        .accessibilityLabel("删除这段文字")
+    }
+
+    // MARK: - icon row
+
+    private var acceptTarget: String? {
+        if case let .diff(result) = model.phase {
+            return result.isEmpty ? nil : result
+        }
+        return model.finding.suggestions.first
+    }
+
+    private var acceptLabel: String {
+        guard let target = acceptTarget else { return "应用" }
+        return target.isEmpty ? "删除这段文字" : "替换为：\(target)"
+    }
+
+    private var iconRow: some View {
+        HStack(spacing: 8) {
+            Button {
+                if let target = acceptTarget { model.apply(target) }
+            } label: {
+                ZStack {
+                    Circle().fill(DeAIDesign.acceptGreen)
+                        .frame(width: 26, height: 26)
+                    if model.phase == .loading {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .colorScheme(.light)
+                    } else {
+                        Image(systemName: "checkmark")
+                            .font(DeAIDesign.font(11, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(model.applicationStarted || acceptTarget == nil)
+            .help(acceptLabel)
+            .accessibilityLabel(acceptLabel)
+
+            iconButton("wand.and.stars", label: "AI 改写") { model.onRewrite() }
+                .help("AI 改写这一段")
+            iconButton("nosign", label: "忽略") { model.onIgnore() }
+                .help("忽略")
+            Menu {
+                Button("停用此规则") { model.onDisableRule() }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(DeAIDesign.font(12, weight: .medium))
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .menuIndicator(.hidden)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(model.applicationStarted)
+            .help("更多")
+            .accessibilityLabel("更多")
         }
     }
 
-    private func applyButton(_ suggestion: String) -> some View {
-        Button { model.apply(suggestion) } label: {
-            HStack {
-                if model.phase == .loading && (model.selectedReplacement == nil || model.selectedReplacement == suggestion) {
-                    if reduceMotion {
-                        Image(systemName: "ellipsis")
-                    } else {
-                        ProgressView().controlSize(.small).colorScheme(.light)
-                    }
-                    Text("正在应用")
-                } else {
-                    Text(suggestion.isEmpty ? "删除这段文字" : "替换")
-                }
-                Spacer()
-                Image(systemName: "arrow.right").font(DeAIDesign.font(13, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .contentTransition(.opacity)
-            .animation(.easeOut(duration: DeAIDesign.contentDuration), value: model.phase)
+    private func iconButton(
+        _ symbol: String, label: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(DeAIDesign.font(12, weight: .medium))
+                .foregroundStyle(DeAIDesign.muted)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(DeAIButtonStyle(inverted: true))
+        .buttonStyle(.plain)
         .disabled(model.applicationStarted)
-        .accessibilityLabel(suggestion.isEmpty ? "删除这段文字" : "替换为：\(suggestion)")
+        .accessibilityLabel(label)
     }
+
+    // MARK: - completion
 
     private var completion: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: model.phase == .success ? "checkmark" : "exclamationmark")
-                .font(DeAIDesign.font(13, weight: .medium))
-                .foregroundStyle(DeAIDesign.ink)
-                .frame(width: 30, height: 30)
-                .background(DeAIDesign.paper, in: Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                Text(model.phase == .success ? "已应用" : "未能应用")
-                    .font(DeAIDesign.font(14, weight: .semibold))
-                if model.phase == .failure {
-                    Text("重新检查后再试。")
-                        .font(DeAIDesign.font(10)).foregroundStyle(.white.opacity(0.48))
+                .font(DeAIDesign.font(11, weight: .bold))
+                .foregroundStyle(model.phase == .success ? DeAIDesign.onAccent : DeAIDesign.text)
+                .frame(width: 24, height: 24)
+                .background(
+                    model.phase == .success ? DeAIDesign.acceptGreen : DeAIDesign.surface,
+                    in: Circle()
+                )
+                .overlay {
+                    if model.phase != .success {
+                        Circle().strokeBorder(DeAIDesign.border, lineWidth: 0.5)
+                    }
                 }
-            }
+            Text(model.phase == .success ? "已应用" : "未能应用")
+                .font(DeAIDesign.font(13, weight: .semibold))
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)

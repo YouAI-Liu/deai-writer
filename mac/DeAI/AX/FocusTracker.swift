@@ -25,6 +25,13 @@ protocol FocusTrackerDelegate: AnyObject {
     func focusSelectionMayHaveChanged(_ target: TextTarget)
     /// Geometry inputs changed (move/resize/scroll) — recompute rects.
     func focusGeometryDirty()
+    /// Scroll input: AX bounds read at event time are pre-scroll (the app
+    /// redraws after the event), so the controller hides underlines and
+    /// re-measures on a trailing debounce instead.
+    func focusScrolled()
+    /// Cheap per-tick hook for the safety timer — the controller uses it to
+    /// spot stale underlines without a full re-check.
+    func focusSafetyTick()
     /// Everything torn down (app switch to an app we don't serve).
     func focusLost()
     /// The tracked window was (de)miniaturized — hide/show overlay.
@@ -79,8 +86,14 @@ final class FocusTracker {
         }
         if let m = NSEvent.addGlobalMonitorForEvents(
             matching: [.scrollWheel, .leftMouseUp],
-            handler: { [weak self] _ in
-                Task { @MainActor in self?.geometryDirty() }
+            handler: { [weak self] event in
+                // delivered on the registering (main) thread — no async hop:
+                // the scroll hide must beat the target app's repaint
+                if event.type == .scrollWheel {
+                    self?.scrollDirty()
+                } else {
+                    self?.geometryDirty()
+                }
             }
         ) {
             eventMonitors.append(m)
@@ -311,11 +324,25 @@ final class FocusTracker {
     private var mayPageTargets = false
     private var resolveWorkItem: DispatchWorkItem?
 
-    /// Geometry changed: refresh rects, and in apps whose targets are slices
-    /// of a shared text (Word pages) re-resolve targets so newly visible
-    /// pages get covered and off-screen ones are dropped (debounced 300 ms).
+    /// Geometry changed (move/resize/mouse-up): refresh rects, and in apps
+    /// whose targets are slices of a shared text (Word pages) re-resolve
+    /// targets so newly visible pages get covered and off-screen ones are
+    /// dropped (debounced 300 ms).
     private func geometryDirty() {
         delegate?.focusGeometryDirty()
+        scheduleTargetResolve()
+    }
+
+    /// Scroll input: bounds read right now are pre-scroll, so the delegate
+    /// hides + re-measures on a trailing debounce; sliced-text targets are
+    /// still re-resolved after 300 ms (the resolve is followed by a
+    /// re-measure in `focusTargetsChanged`).
+    private func scrollDirty() {
+        delegate?.focusScrolled()
+        scheduleTargetResolve()
+    }
+
+    private func scheduleTargetResolve() {
         guard mayPageTargets else { return }
         resolveWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
@@ -364,6 +391,9 @@ final class FocusTracker {
             lastWindowFrame = windowFrame
             geometryDirty()
         }
+        // Element/window frames don't move during scroll — let the
+        // controller spot stale underline rects per target.
+        delegate?.focusSafetyTick()
     }
 }
 

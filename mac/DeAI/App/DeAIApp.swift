@@ -53,40 +53,63 @@ struct MenuContent: View {
     @ObservedObject var controller: AppController
     @ObservedObject var settings: AppSettings
     @Environment(\.openWindow) private var openWindow
+    @State private var groupsExpanded: Bool
 
-    init(controller: AppController) {
+    init(controller: AppController, groupsExpanded: Bool = false) {
         self.controller = controller
         _settings = ObservedObject(wrappedValue: controller.settings)
+        _groupsExpanded = State(initialValue: groupsExpanded)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("DeAI").font(DeAIDesign.font(22, weight: .semibold)).tracking(-0.7)
+                Text("DeAI").font(DeAIDesign.titleFont(22)).tracking(-0.7)
                 Spacer()
             }
             Toggle("自动下划线", isOn: $settings.autoUnderline)
-                .toggleStyle(DeAIToggleStyle(inverted: true))
+                .toggleStyle(DeAIToggleStyle())
             if let bundleId = controller.frontmostBundleId {
-                Button {
-                    controller.toggleCurrentApp()
-                } label: {
-                    HStack {
-                        Text(settings.isAppEnabled(bundleId)
-                             ? "在 \(appName(bundleId)) 中停用" : "在 \(appName(bundleId)) 中启用")
-                            .lineLimit(2)
-                        Spacer()
+                Toggle(isOn: Binding(
+                    get: { settings.isAppEnabled(bundleId) },
+                    set: { on in
+                        if on != settings.isAppEnabled(bundleId) {
+                            controller.toggleCurrentApp()
+                        }
+                    }
+                )) {
+                    Text("在 \(appName(bundleId)) 中检查").lineLimit(2)
+                }
+                .toggleStyle(DeAIToggleStyle())
+            }
+            Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
+            // BUG-03: a SwiftUI Menu renders as a system pop-up button with
+            // unreadable text on our custom surface — expand inline instead.
+            Button {
+                withAnimation(DeAIDesign.motion(false)) { groupsExpanded.toggle() }
+            } label: {
+                HStack {
+                    Text("应用类型")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(DeAIDesign.font(10, weight: .semibold))
+                        .foregroundStyle(DeAIDesign.muted)
+                        .rotationEffect(.degrees(groupsExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if groupsExpanded {
+                VStack(spacing: 12) {
+                    ForEach(AppGroup.allCases, id: \.self) { group in
+                        Toggle(group.displayName, isOn: groupBinding(group))
+                            .toggleStyle(DeAIToggleStyle())
                     }
                 }
-                .buttonStyle(.plain)
+                .font(DeAIDesign.font(11))
+                .padding(.leading, 8)
             }
-            Rectangle().fill(.white.opacity(0.12)).frame(height: 0.5)
-            Menu("应用类型") {
-                ForEach(AppGroup.allCases, id: \.self) { group in
-                    Toggle(group.displayName, isOn: groupBinding(group))
-                }
-            }
-            Rectangle().fill(.white.opacity(0.12)).frame(height: 0.5)
+            Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
             VStack(spacing: 16) {
                 menuButton("设置") { controller.showSettingsWindow() }
                 menuButton("规则测试窗口") { openWindow(id: "debug") }
@@ -97,14 +120,11 @@ struct MenuContent: View {
             }
         }
         .font(DeAIDesign.font(12))
-        .foregroundStyle(DeAIDesign.paper)
+        .foregroundStyle(DeAIDesign.text)
         .padding(24).frame(width: 300)
-        .background(DeAIDesign.ink, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
-        .overlay {
-            RoundedRectangle(cornerRadius: DeAIDesign.radius)
-                .strokeBorder(DeAIDesign.componentOutline, lineWidth: 0.5)
-        }
-        .preferredColorScheme(.dark)
+        // fill the whole MenuBarExtra window edge to edge; the system window
+        // already supplies the rounded corners and border
+        .background(DeAIDesign.background.ignoresSafeArea())
     }
 
     private func menuButton(_ title: String, action: @escaping () -> Void) -> some View {

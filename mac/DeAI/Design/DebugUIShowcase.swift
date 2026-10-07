@@ -39,7 +39,7 @@ struct DebugUIShowcase: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 760, height: 790)
-        .background(DeAIDesign.canvas)
+        .background(DeAIDesign.background)
         .onAppear {
             model.onApply = { _, completion in
                 applications += 1
@@ -59,7 +59,7 @@ struct DebugUIShowcase: View {
                     .padding(.top, 64)
             }
             .frame(maxWidth: .infinity).frame(height: 410)
-            .background(darkHost ? DeAIDesign.darkHost : DeAIDesign.canvas)
+            .background(darkHost ? DeAIDesign.sidebar : DeAIDesign.background)
             HStack(spacing: 12) {
                 Button("待处理") { reset() }
                 Button("应用中") { reset(); model.phase = .loading }
@@ -74,7 +74,7 @@ struct DebugUIShowcase: View {
                     )
                 }
             }
-            .buttonStyle(DeAIButtonStyle(compact: true))
+            .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
             HStack {
                 Toggle("减少动态效果", isOn: $reduced)
                 Toggle("深色宿主", isOn: $darkHost)
@@ -89,6 +89,34 @@ struct DebugUIShowcase: View {
     private func reset() {
         model.update(finding: Self.sample, matchedText: "说白了，")
         model.visible = true
+    }
+}
+
+/// The per-kind check chips in both states, and again as rendered inside a
+/// disabled app group (the `isEnabled` path of DeAIChipToggleStyle).
+private struct DebugChipRows: View {
+    var disabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(disabled ? "组已停用" : "组已启用")
+                .font(DeAIDesign.font(10))
+                .foregroundStyle(DeAIDesign.muted)
+            HStack(spacing: 8) {
+                ForEach(CheckKind.allCases, id: \.self) { kind in
+                    Toggle(kind.shortName, isOn: .constant(true))
+                        .toggleStyle(DeAIChipToggleStyle())
+                }
+            }
+            HStack(spacing: 8) {
+                ForEach(CheckKind.allCases, id: \.self) { kind in
+                    Toggle(kind.shortName, isOn: .constant(false))
+                        .toggleStyle(DeAIChipToggleStyle())
+                }
+            }
+        }
+        .font(DeAIDesign.font(11))
+        .disabled(disabled)
     }
 }
 
@@ -118,8 +146,8 @@ private struct DebugUnderlineColors: View {
             }
         }
         .padding(30).frame(width: 310, height: 400, alignment: .topLeading)
-        .foregroundStyle(dark ? DeAIDesign.paper : DeAIDesign.ink)
-        .background(dark ? DeAIDesign.darkHost : DeAIDesign.canvas)
+        .foregroundStyle(DeAIDesign.text)
+        .background(DeAIDesign.background)
         .environment(\.colorScheme, dark ? .dark : .light)
     }
 }
@@ -204,7 +232,7 @@ final class DebugUICapture {
             .environment(\.deaiReducedMotionOverride, reduced ? true : nil)
             .padding(.top, 74)
             .frame(width: 620, height: 500)
-            .background(dark ? DeAIDesign.darkHost : DeAIDesign.canvas)
+            .background(DeAIDesign.background)
     }
 
     private func save(_ name: String, after delay: Double = 0.6) async throws {
@@ -221,22 +249,30 @@ final class DebugUICapture {
         print("UI screenshot: \(name)")
     }
 
-    /// Stage for the rewrite panel — the view is dark-on-dark like the
-    /// card, so it floats on canvas for legibility.
+    /// Stage for the rewrite panel — the view adapts to the stage's
+    /// colorScheme environment like the card.
     private func rewriteStage(_ model: RewritePanelModel, dark: Bool = false) -> some View {
         RewritePanelView(model: model)
             .padding(60)
             .frame(width: 620, height: 420)
-            .background(dark ? DeAIDesign.darkHost : DeAIDesign.canvas)
+            .background(DeAIDesign.background)
     }
 
     private func scrollToBottom(in view: NSView?) {
+        scrollTo(fraction: 1, in: view)
+    }
+
+    private func scrollTo(fraction: CGFloat, in view: NSView?) {
         guard let view else { return }
         if let scroll = view as? NSScrollView, let document = scroll.documentView {
-            document.scroll(NSPoint(x: 0, y: document.isFlipped ? document.bounds.maxY : 0))
+            let visible = scroll.contentView.bounds.height
+            let top = document.isFlipped
+                ? (document.bounds.height - visible) * fraction
+                : document.bounds.height * fraction
+            document.scroll(NSPoint(x: 0, y: max(0, top)))
             return
         }
-        for child in view.subviews { scrollToBottom(in: child) }
+        for child in view.subviews { scrollTo(fraction: fraction, in: child) }
     }
 
     private func run() async {
@@ -246,6 +282,32 @@ final class DebugUICapture {
             model.onApply = { _, completion in completion(true) }
             show(card(), size: NSSize(width: 620, height: 500))
             try await save("card-idle")
+            model.update(
+                finding: Finding(
+                    category: .aiToneZh, ruleId: "zh.banned_opener",
+                    message: "删掉套话，直接说重点。", start: 0, end: 4,
+                    suggestions: [""], tier: 1
+                ),
+                matchedText: "说白了，"
+            )
+            try await save("card-deletion")
+            model.update(
+                finding: Finding(
+                    category: .grammar, ruleId: "harper.Agreement",
+                    message: "主谓不一致", start: 0, end: 2,
+                    suggestions: ["goes", "went"], tier: 1
+                ),
+                matchedText: "go"
+            )
+            try await save("card-multi")
+            model.update(
+                finding: Finding(
+                    category: .markdown, ruleId: "md.bold",
+                    message: "Markdown 残留：加粗", start: 0, end: 6,
+                    suggestions: ["粗体"], tier: 1
+                ),
+                matchedText: "**粗体**"
+            )
             model.phase = .loading
             try await save("card-loading")
             model.update(finding: model.finding, matchedText: model.matchedText)
@@ -254,7 +316,7 @@ final class DebugUICapture {
             try await save("card-success-animation", after: 0.38)
             try await save("card-success")
             model.update(finding: model.finding, matchedText: model.matchedText)
-            model.phase = .diff("")
+            model.phase = .diff("改写后的直接表述。")
             try await save("card-diff-structure")
             model.update(finding: model.finding, matchedText: model.matchedText)
             show(card(dark: true), size: NSSize(width: 620, height: 500))
@@ -278,12 +340,23 @@ final class DebugUICapture {
             try await save("settings")
             scrollToBottom(in: window.contentView)
             try await save("settings-rules")
+            // 应用类型 section mid-scroll: browser/sensitive groups are
+            // disabled by default, showing the dimmed chip style
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
+                 size: NSSize(width: 560, height: 660))
+            scrollTo(fraction: 0.42, in: window.contentView)
+            try await save("settings-groups")
+            scrollToBottom(in: window.contentView)
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 1),
                  size: NSSize(width: 560, height: 660))
             try await save("settings-appearance")
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 2),
                  size: NSSize(width: 560, height: 660))
             try await save("settings-ai")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit",
+                              initialTab: 2, hotkeyRecordingPreview: true),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-ai-recording")
             // rewrite panel states (mock model — same view the panel hosts)
             let rewriteModel = RewritePanelModel()
             rewriteModel.phase = .loading
@@ -299,6 +372,9 @@ final class DebugUICapture {
             try await save("permission")
             show(MenuContent(controller: controller), size: NSSize(width: 300, height: 270))
             try await save("menu")
+            show(MenuContent(controller: controller, groupsExpanded: true),
+                 size: NSSize(width: 300, height: 400))
+            try await save("menu-expanded")
             show(ContentView(), size: NSSize(width: 700, height: 620))
             try await save("rule-window", after: 0.6)
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
@@ -310,6 +386,27 @@ final class DebugUICapture {
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 2),
                  size: NSSize(width: 560, height: 660), dark: true)
             try await save("settings-ai-dark")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit",
+                              initialTab: 2, hotkeyRecordingPreview: true),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-ai-recording-dark")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            scrollTo(fraction: 0.42, in: window.contentView)
+            try await save("settings-groups-dark")
+            // chip contrast check: both on/off chip states, group on vs off
+            show(DebugChipRows().padding(24).background(DeAIDesign.background),
+                 size: NSSize(width: 360, height: 140))
+            try await save("settings-chips")
+            show(DebugChipRows(disabled: true).padding(24).background(DeAIDesign.background),
+                 size: NSSize(width: 360, height: 140))
+            try await save("settings-chips-disabled")
+            show(DebugChipRows().padding(24).background(DeAIDesign.background),
+                 size: NSSize(width: 360, height: 140), dark: true)
+            try await save("settings-chips-dark")
+            show(DebugChipRows(disabled: true).padding(24).background(DeAIDesign.background),
+                 size: NSSize(width: 360, height: 140), dark: true)
+            try await save("settings-chips-disabled-dark")
             rewriteModel.phase = .result
             show(rewriteStage(rewriteModel, dark: true),
                  size: NSSize(width: 620, height: 420), dark: true)
@@ -325,6 +422,13 @@ final class DebugUICapture {
             )
             show(card(dark: true), size: NSSize(width: 620, height: 500), dark: true)
             try await save("card-dark-mode")
+            model.phase = .success
+            try await save("card-success-dark")
+            show(MenuContent(controller: controller), size: NSSize(width: 300, height: 270), dark: true)
+            try await save("menu-dark")
+            show(MenuContent(controller: controller, groupsExpanded: true),
+                 size: NSSize(width: 300, height: 400), dark: true)
+            try await save("menu-expanded-dark")
             print("UI capture complete")
         } catch {
             print("UI capture failed: \(error)")

@@ -532,10 +532,10 @@ final class TextReplacerTests: XCTestCase {
                 start: 2, end: 8, replacement: "粗体"
             )
         )
-        // normalized: replacement in place but tail differs
+        // normalized: host appended a trailing paragraph mark
         XCTAssertTrue(
             TextReplacer.pasteVerified(
-                current: current, after: "这是粗体\n尾",
+                current: current, after: "这是粗体文字\r",
                 start: 2, end: 8, replacement: "粗体"
             )
         )
@@ -546,6 +546,239 @@ final class TextReplacerTests: XCTestCase {
                 start: 2, end: 8, replacement: "粗体"
             )
         )
+    }
+
+    /// BUG-01 r4: a doubled write ("goes goes") must never verify — the
+    /// replacement sitting at the slot is not enough when the tail after
+    /// it still contains the original matched text.
+    func testPasteVerifiedDoubleApplyIsFalse() {
+        XCTAssertFalse(
+            TextReplacer.pasteVerified(
+                current: "He go to school", after: "He goes goes to school",
+                start: 3, end: 5, replacement: "goes"
+            )
+        )
+        XCTAssertTrue(
+            TextReplacer.pasteVerified(
+                current: "He go to school", after: "He goes to school",
+                start: 3, end: 5, replacement: "goes"
+            )
+        )
+        // Word may append a trailing paragraph mark to the page value
+        XCTAssertTrue(
+            TextReplacer.pasteVerified(
+                current: "He go to school", after: "He goes to school\r",
+                start: 3, end: 5, replacement: "goes"
+            )
+        )
+        XCTAssertTrue(
+            TextReplacer.pasteVerified(
+                current: "He go to school", after: "He goes to school\n",
+                start: 3, end: 5, replacement: "goes"
+            )
+        )
+        // tail genuinely different → not verified
+        XCTAssertFalse(
+            TextReplacer.pasteVerified(
+                current: "He go to school", after: "He goes to college",
+                start: 3, end: 5, replacement: "goes"
+            )
+        )
+        // prefix changed → not verified
+        XCTAssertFalse(
+            TextReplacer.pasteVerified(
+                current: "He go to school", after: "We goes to school",
+                start: 3, end: 5, replacement: "goes"
+            )
+        )
+    }
+
+    /// A deletion that also eats a preceding character (BUG-11 r4: the
+    /// delete key dropped the newline before the matched range) fails the
+    /// exact length/prefix check.
+    func testPasteVerifiedDeletionEatsNeighborIsFalse() {
+        XCTAssertFalse(
+            TextReplacer.pasteVerified(
+                current: "第一段。\n说白了，下一段。", after: "第一段。下一段。",
+                start: 5, end: 9, replacement: ""
+            )
+        )
+        // correct deletion (newline preserved) still verifies
+        XCTAssertTrue(
+            TextReplacer.pasteVerified(
+                current: "第一段。\n说白了，下一段。", after: "第一段。\n下一段。",
+                start: 5, end: 9, replacement: ""
+            )
+        )
+    }
+
+    // MARK: ApplyGate — at most one in-flight write per element (BUG-01)
+
+    func testApplyGateSerializesPerElement() {
+        var gate = TextReplacer.ApplyGate()
+        XCTAssertTrue(gate.begin(42))
+        // a second write on the same element while the first is in flight
+        // is rejected — that race is what produced "goesgoes" in Word
+        XCTAssertFalse(gate.begin(42))
+        XCTAssertFalse(gate.begin(42))
+        // a different element is unaffected
+        XCTAssertTrue(gate.begin(7))
+        // once the first write completes, the element is writable again
+        gate.end(42)
+        XCTAssertTrue(gate.begin(42))
+        XCTAssertTrue(gate.inFlight.contains(42))
+        XCTAssertTrue(gate.inFlight.contains(7))
+        gate.end(42)
+        gate.end(7)
+        XCTAssertTrue(gate.inFlight.isEmpty)
+    }
+
+    // MARK: prePasteDecision() — settle before pasting (BUG-01)
+
+    func testPrePasteDecision() {
+        // text untouched since the AX write attempt → safe to paste
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "He go to school", text: "He go to school",
+                start: 3, end: 5, matched: "go", replacement: "goes"
+            ),
+            .paste
+        )
+        // the AX write landed late: "go"→"goes" — the matched range still
+        // reads "go" (prefix), but the text differs from baseline, and the
+        // slot now holds the replacement → already applied, never paste
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "He go to school", text: "He goes to school",
+                start: 3, end: 5, matched: "go", replacement: "goes"
+            ),
+            .alreadyApplied
+        )
+        // shrinking replacement "goes"→"go": "go" is a prefix of the
+        // untouched text, so substring checks alone would false-positive;
+        // baseline comparison keeps it .paste while unchanged
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "He goes to school", text: "He goes to school",
+                start: 3, end: 7, matched: "goes", replacement: "go"
+            ),
+            .paste
+        )
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "He goes to school", text: "He go to school",
+                start: 3, end: 7, matched: "goes", replacement: "go"
+            ),
+            .alreadyApplied
+        )
+        // text changed to something unrelated → abort, never paste
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "He go to school", text: "He went to school",
+                start: 3, end: 5, matched: "go", replacement: "goes"
+            ),
+            .abort
+        )
+        // deletion: matched range gone via the earlier write → alreadyApplied
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "说白了，确实如此", text: "确实如此",
+                start: 0, end: 4, matched: "说白了，", replacement: ""
+            ),
+            .alreadyApplied
+        )
+        XCTAssertEqual(
+            TextReplacer.prePasteDecision(
+                baseline: "说白了，确实如此", text: "说白了，确实如此",
+                start: 0, end: 4, matched: "说白了，", replacement: ""
+            ),
+            .paste
+        )
+    }
+
+    /// Word skips the AX write entirely: its page-element setSelectedText
+    /// can write while AXValue stays stale, so the settle loop would paste
+    /// on top of it (BUG-01 r2).
+    // MARK: wordDeletionAsReplacement() — Word Cut is a no-op (BUG-01 r5)
+
+    private func assertExt(
+        _ actual: (start: Int, end: Int, replacement: String)?,
+        _ want: (Int, Int, String), file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let actual else {
+            XCTFail("expected extension", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(actual.start, want.0, file: file, line: line)
+        XCTAssertEqual(actual.end, want.1, file: file, line: line)
+        XCTAssertEqual(actual.replacement, want.2, file: file, line: line)
+    }
+
+    func testWordDeletionAsReplacement() {
+        // following char is usable → extend end, paste it back
+        assertExt(
+            TextReplacer.wordDeletionAsReplacement(text: "ab", start: 0, end: 1),
+            (0, 2, "b")
+        )
+        // following char is a paragraph separator → take the preceding one
+        assertExt(
+            TextReplacer.wordDeletionAsReplacement(text: "ab\ncd", start: 1, end: 2),
+            (0, 2, "a")
+        )
+        // phrase at end of text → preceding char
+        assertExt(
+            TextReplacer.wordDeletionAsReplacement(text: "ab", start: 1, end: 2),
+            (0, 2, "a")
+        )
+        // following neighbour is an emoji → whole surrogate pair
+        assertExt(
+            TextReplacer.wordDeletionAsReplacement(text: "a😀b", start: 0, end: 1),
+            (0, 3, "😀")
+        )
+        // preceding neighbour is an emoji → whole surrogate pair, start -2
+        assertExt(
+            TextReplacer.wordDeletionAsReplacement(text: "a😀b", start: 3, end: 4),
+            (1, 4, "😀")
+        )
+        // \r counts as a separator too → preceding char used
+        assertExt(
+            TextReplacer.wordDeletionAsReplacement(text: "ab\rc", start: 1, end: 2),
+            (0, 2, "a")
+        )
+        // the paragraph sits alone between two separators → no usable char
+        XCTAssertNil(
+            TextReplacer.wordDeletionAsReplacement(text: "\nx\n", start: 1, end: 2)
+        )
+        // single-char text, deleting it → nil (both sides empty)
+        XCTAssertNil(
+            TextReplacer.wordDeletionAsReplacement(text: "x", start: 0, end: 1)
+        )
+        // empty range → nil
+        XCTAssertNil(
+            TextReplacer.wordDeletionAsReplacement(text: "abc", start: 1, end: 1)
+        )
+    }
+
+    /// Scroll-suppression predicate: while the window is active nothing may
+    /// draw; the trailing re-measure runs after it expires.
+    func testScrollSuppressed() {
+        XCTAssertTrue(AppController.scrollSuppressed(now: 10, until: 20))
+        XCTAssertFalse(AppController.scrollSuppressed(now: 20, until: 20))
+        XCTAssertFalse(AppController.scrollSuppressed(now: 21, until: 20))
+        XCTAssertFalse(AppController.scrollSuppressed(now: 10, until: 0))
+    }
+
+    /// Word skips the AX write entirely: its page-element `setSelectedText`
+    /// can write while AXValue stays stale, so the settle loop would paste
+    /// on top of it (BUG-01 r2).
+    func testSkipsAXWrite() {
+        XCTAssertTrue(TextReplacer.skipsAXWrite(bundleId: "com.microsoft.Word"))
+        XCTAssertFalse(
+            TextReplacer.skipsAXWrite(bundleId: "com.apple.TextEdit")
+        )
+        XCTAssertFalse(TextReplacer.skipsAXWrite(bundleId: "com.apple.Notes"))
+        XCTAssertFalse(TextReplacer.skipsAXWrite(bundleId: nil))
     }
 }
 
@@ -594,6 +827,18 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(s.isAppEnabled("com.google.Chrome"))
         s.setAppEnabled("com.apple.TextEdit", false)
         XCTAssertFalse(s.isAppEnabled("com.apple.TextEdit"))
+    }
+
+    /// BUG-02: disabling then re-enabling the current app must flip the
+    /// per-app rule back — the menu toggle relies on `isAppEnabled`.
+    func testAppToggleRoundTrip() {
+        let (s, _) = fresh()
+        let id = "com.apple.TextEdit"
+        XCTAssertTrue(s.isAppEnabled(id))
+        s.setAppEnabled(id, false)
+        XCTAssertFalse(s.isAppEnabled(id))
+        s.setAppEnabled(id, true)
+        XCTAssertTrue(s.isAppEnabled(id))
     }
 
     func testCodableRoundTrip() {
@@ -1326,5 +1571,45 @@ final class UnderlineAppearanceAwareTests: XCTestCase {
         XCTAssertEqual(newLayer.path, path)
         XCTAssertEqual(view.hitRects().map(\.0), hits)
         XCTAssertEqual(newLayer.lineWidth, 1.2)
+    }
+}
+
+// MARK: - safety-tick drift predicate (scroll stale-rect catch)
+
+final class RectsMovedTests: XCTestCase {
+    private let r = CGRect(x: 10, y: 20, width: 30, height: 4)
+
+    func testIdenticalRectsNotMoved() {
+        XCTAssertFalse(AppController.rectsMoved([r], [r]))
+    }
+
+    func testSubPointDriftIgnored() {
+        let shifted = r.offsetBy(dx: 0.7, dy: -0.7)
+        XCTAssertFalse(AppController.rectsMoved([r], [shifted]))
+    }
+
+    func testMovedBeyondTolerance() {
+        XCTAssertTrue(
+            AppController.rectsMoved([r], [r.offsetBy(dx: 0, dy: 1.5)])
+        )
+        XCTAssertTrue(
+            AppController.rectsMoved([r], [r.offsetBy(dx: -40, dy: 0)])
+        )
+    }
+
+    func testCountMismatchIsMoved() {
+        XCTAssertTrue(AppController.rectsMoved([r], []))
+        XCTAssertTrue(AppController.rectsMoved([], [r]))
+        XCTAssertTrue(AppController.rectsMoved([r, r], [r]))
+    }
+
+    func testSizeChangeIsMoved() {
+        var grown = r
+        grown.size.width += 2
+        XCTAssertTrue(AppController.rectsMoved([r], [grown]))
+    }
+
+    func testBothEmptyNotMoved() {
+        XCTAssertFalse(AppController.rectsMoved([], []))
     }
 }

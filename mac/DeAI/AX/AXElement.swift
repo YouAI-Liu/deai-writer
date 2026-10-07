@@ -206,6 +206,16 @@ final class AXElement: @unchecked Sendable {
         parameterized(kAXLineForIndexParameterizedAttribute, NSNumber(value: index))
     }
 
+    /// `AXPress` — used for app menu commands (e.g. Word's Edit ▸ Paste).
+    @discardableResult
+    func press() -> Bool {
+        let err = AXUIElementPerformAction(raw, kAXPressAction as CFString)
+        if err != .success {
+            Self.log.debug("press failed: \(err.rawValue)")
+        }
+        return err == .success
+    }
+
     /// `AXRangeForLine` (parameterized; takes a CFNumber).
     func rangeForLine(_ line: Int) -> CFRange? {
         var r = CFRange()

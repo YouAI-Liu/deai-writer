@@ -36,6 +36,7 @@
 		CC0A949819225BC6F704BBF8 /* DeAICore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1A2A9F49D4FC638F50FB12 /* DeAICore.swift */; };
 		D8DC8633CAC8170AACB37EC1 /* DeAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0EB397B06D565322CAB57D /* DeAIApp.swift */; };
 		D9B40DB6DA15B2AF953236A6 /* FocusTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9B656910EE1ECB8B4F7574 /* FocusTracker.swift */; };
+		E31B1FF09123BFAF6611C6F2 /* ShortcutRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F5A0FD0012C0C98AAA740DA /* ShortcutRecorder.swift */; };
 		E771A18EABF2CB2396DEE1D4 /* RewritePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C5891B17763F9E5DDE37C3 /* RewritePanel.swift */; };
 		EF793542DDE1494985A2A042 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A160E60D2C7FDD627F0103 /* ContentView.swift */; };
 		F1872113783568B9CE26B68E /* ParagraphGrammarCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CCC5C88F697ADBCC98A01AC /* ParagraphGrammarCache.swift */; };
@@ -75,6 +76,7 @@
 		7E7DE3B50753C53D6332149B /* PermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionView.swift; sourceTree = "<group>"; };
 		880F92DF93466ED427FE9D36 /* DeAIDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAIDesign.swift; sourceTree = "<group>"; };
 		88C5891B17763F9E5DDE37C3 /* RewritePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewritePanel.swift; sourceTree = "<group>"; };
+		8F5A0FD0012C0C98AAA740DA /* ShortcutRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecorder.swift; sourceTree = "<group>"; };
 		9B9B656910EE1ECB8B4F7574 /* FocusTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusTracker.swift; sourceTree = "<group>"; };
 		A7A160E60D2C7FDD627F0103 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AC0EB397B06D565322CAB57D /* DeAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAIApp.swift; sourceTree = "<group>"; };
@@ -260,6 +262,7 @@
 				2248647D78AC1699CFB9EDB1 /* AppGroups.swift */,
 				4712B5A62B8F80DFDC3368E2 /* AppSettings.swift */,
 				694283D53AC8F23B940F5360 /* SettingsView.swift */,
+				8F5A0FD0012C0C98AAA740DA /* ShortcutRecorder.swift */,
 				657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */,
 			);
 			path = Settings;
@@ -366,6 +369,7 @@
 				53AC67001400AA38D6544BE9 /* RewriteScope.swift in Sources */,
 				4A9657312A94751AAFA91D32 /* SecretStore.swift in Sources */,
 				7E2C032283696344D4CB7FAD /* SettingsView.swift in Sources */,
+				E31B1FF09123BFAF6611C6F2 /* ShortcutRecorder.swift in Sources */,
 				1E409E04070FB33A8F651F12 /* SuggestionCardPanel.swift in Sources */,
 				04FC1A24F0A7EC402891F4B0 /* SuggestionCardView.swift in Sources */,
 				643595E12A10B7BD87DB1124 /* TextGeometry.swift in Sources */,

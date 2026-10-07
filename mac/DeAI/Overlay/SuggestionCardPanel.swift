@@ -68,7 +68,13 @@ final class SuggestionCardPanel {
             panel.contentView = host
             self.model = model
         }
-        model.onApply = onApply
+        // BUG-01 diagnostics: did the card panel steal key focus at click?
+        model.onApply = { [weak self] replacement, completion in
+            TextReplacer.dbgLog(
+                "card apply click: panel.isKeyWindow=\(self?.panel?.isKeyWindow ?? false)"
+            )
+            onApply(replacement, completion)
+        }
         // the controller re-derives the scope from the finding — the
         // card must be gone before the rewrite panel anchors
         model.onRewrite = { [weak self] in self?.dismiss(); onRewrite() }

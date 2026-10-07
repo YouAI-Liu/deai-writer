@@ -20,19 +20,24 @@ struct DeAIReducedMotion: DynamicProperty {
 }
 
 enum DeAIDesign {
-    // Fixed colors for the suggestion card and menu panel.
-    static let ink = Color(nsColor: rgb(0x111111))
-    static let paper = Color(nsColor: rgb(0xFAFAF8))
-    static let canvas = adaptive("canvas", light: rgb(0xECEBE8), dark: rgb(0x161615))
-    static let surface = adaptive("surface", light: rgb(0xFAFAF8), dark: rgb(0x1F1F1E))
-    static let text = adaptive("text", light: rgb(0x111111), dark: rgb(0xFAFAF8))
-    static let muted = adaptive("muted", light: rgb(0x6C6B67), dark: NSColor.white.withAlphaComponent(0.6))
-    static let controlBackground = adaptive("controlBackground", light: rgb(0x111111), dark: rgb(0xFAFAF8))
-    static let controlForeground = adaptive("controlForeground", light: rgb(0xFAFAF8), dark: rgb(0x111111))
-    static let inactiveTrack = adaptive("inactiveTrack", light: rgb(0x111111).withAlphaComponent(0.15), dark: NSColor.white.withAlphaComponent(0.2))
-    static let componentOutline = Color.white.opacity(0.10)
-    static let darkHost = Color(nsColor: rgb(0x2B2B2B))
-    static let radius: CGFloat = 24
+    // Claude-style palette (tokens mirror the Claude desktop theme) —
+    // every surface follows the system appearance.
+    static let background = adaptive("background", light: rgb(0xFAF9F5), dark: rgb(0x262624))
+    static let sidebar = adaptive("sidebar", light: rgb(0xF5F4ED), dark: rgb(0x1F1E1D))
+    static let track = adaptive("track", light: rgb(0xF0EEE6), dark: rgb(0x141413))
+    static let surface = adaptive("surface", light: rgb(0xFFFFFF), dark: rgb(0x30302E))
+    static let border = adaptive("border", light: rgb(0x1F1E1D).withAlphaComponent(0.15), dark: rgb(0xDEDCD1).withAlphaComponent(0.15))
+    static let text = adaptive("text", light: rgb(0x141413), dark: rgb(0xFAF9F5))
+    static let secondaryText = adaptive("secondaryText", light: rgb(0x3D3D3A), dark: rgb(0xC2C0B6))
+    static let muted = adaptive("muted", light: rgb(0x73726C), dark: rgb(0x9C9A92))
+    static let accent = adaptive("accent", light: rgb(0xC6613F), dark: rgb(0xD97757))
+    static let danger = adaptive("danger", light: rgb(0xB53333), dark: rgb(0xDD5353))
+    static let onAccent = Color.white
+    static let inactiveTrack = adaptive("inactiveTrack", light: rgb(0x141413).withAlphaComponent(0.15), dark: rgb(0xFAF9F5).withAlphaComponent(0.15))
+    /// Accent green for the card's accept check (Office-style).
+    static let acceptGreen = Color(red: 0.20, green: 0.78, blue: 0.35)
+    static let radius: CGFloat = 12
+    static let controlRadius: CGFloat = 8
     static let contentDuration = 0.15
 
     private static func rgb(_ hex: UInt32) -> NSColor {
@@ -61,6 +66,10 @@ enum DeAIDesign {
         .system(size: size, weight: weight, design: .default)
     }
 
+    static func titleFont(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .medium, design: .serif)
+    }
+
     static func motion(_ reduced: Bool) -> Animation {
         reduced ? .easeOut(duration: contentDuration) : .spring(response: 0.38, dampingFraction: 0.88)
     }
@@ -84,22 +93,20 @@ private struct BlurFade: ViewModifier {
 
 struct SecondaryLabel: View {
     let text: String
-    var light = false
 
-    init(_ text: String, light: Bool = false) {
+    init(_ text: String) {
         self.text = text
-        self.light = light
     }
 
     var body: some View {
         Text(text)
             .font(DeAIDesign.font(11))
-            .foregroundStyle(light ? Color.white.opacity(0.55) : DeAIDesign.muted)
+            .foregroundStyle(DeAIDesign.muted)
     }
 }
 
 struct DeAIButtonStyle: ButtonStyle {
-    var inverted = false
+    var secondary = false
     var compact = false
     @DeAIReducedMotion private var reduceMotion: Bool
 
@@ -108,29 +115,39 @@ struct DeAIButtonStyle: ButtonStyle {
             .font(DeAIDesign.font(12, weight: .medium))
             .padding(.horizontal, compact ? 12 : 18)
             .padding(.vertical, compact ? 8 : 12)
-            .foregroundStyle(inverted ? DeAIDesign.ink : DeAIDesign.controlForeground)
-            .background(inverted ? DeAIDesign.paper : DeAIDesign.controlBackground, in: Capsule())
+            .foregroundStyle(secondary ? DeAIDesign.text : DeAIDesign.onAccent)
+            .background(secondary ? DeAIDesign.surface : DeAIDesign.accent, in: Capsule())
+            .overlay {
+                if secondary {
+                    Capsule().strokeBorder(DeAIDesign.border, lineWidth: 1)
+                }
+            }
             .opacity(configuration.isPressed ? 0.72 : 1)
             .animation(DeAIDesign.motion(reduceMotion), value: configuration.isPressed)
     }
 }
 
 struct DeAIToggleStyle: ToggleStyle {
-    var inverted = false
+    /// Set false for rows that lay out their own label — unlike
+    /// `.labelsHidden()` (which only affects macOS 15+ environments), this
+    /// reliably suppresses the label on our deployment target (14.0).
+    var showsLabel = true
     @DeAIReducedMotion private var reduceMotion: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 12) {
-            configuration.label
+            if showsLabel {
+                configuration.label
+            }
             Spacer(minLength: 12)
             Button {
                 configuration.isOn.toggle()
             } label: {
                 Capsule()
-                    .fill(configuration.isOn ? (inverted ? DeAIDesign.paper : DeAIDesign.controlBackground) : (inverted ? Color.white.opacity(0.2) : DeAIDesign.inactiveTrack))
+                    .fill(configuration.isOn ? DeAIDesign.accent : DeAIDesign.inactiveTrack)
                     .frame(width: 38, height: 23)
                     .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                        Circle().fill(inverted ? DeAIDesign.ink : DeAIDesign.controlForeground)
+                        Circle().fill(DeAIDesign.onAccent)
                             .frame(width: 17, height: 17).padding(3)
                     }
             }
@@ -138,6 +155,52 @@ struct DeAIToggleStyle: ToggleStyle {
             .accessibilityLabel(configuration.isOn ? "关闭" : "开启")
             .accessibilityValue(configuration.isOn ? "已开启" : "已关闭")
         }
+        .animation(reduceMotion ? nil : DeAIDesign.motion(false), value: configuration.isOn)
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+        }
+    }
+}
+
+/// Small capsule chip toggle for the per-kind check selectors,
+/// unlike the system .checkbox which renders a fixed accent-blue.
+struct DeAIChipToggleStyle: ToggleStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @DeAIReducedMotion private var reduceMotion: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                if configuration.isOn {
+                    Image(systemName: "checkmark")
+                        .font(DeAIDesign.font(9, weight: .bold))
+                }
+                configuration.label
+            }
+            .font(DeAIDesign.font(11, weight: .medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            // disabled: neutral track fill + muted text instead of fading
+            // the accent (white-on-pale-accent was unreadable)
+            .foregroundStyle(
+                !isEnabled ? DeAIDesign.text
+                    : configuration.isOn ? DeAIDesign.onAccent : DeAIDesign.muted
+            )
+            .background(
+                !isEnabled ? DeAIDesign.track
+                    : configuration.isOn ? DeAIDesign.accent : DeAIDesign.surface,
+                in: Capsule()
+            )
+            .overlay {
+                Capsule().strokeBorder(
+                    DeAIDesign.border,
+                    lineWidth: isEnabled && configuration.isOn ? 0 : 1
+                )
+            }
+        }
+        .buttonStyle(.plain)
         .animation(reduceMotion ? nil : DeAIDesign.motion(false), value: configuration.isOn)
         .accessibilityRepresentation {
             Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
@@ -159,15 +222,20 @@ struct SensitivityControl: View {
                     Text(title)
                         .font(DeAIDesign.font(12, weight: .medium))
                         .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .foregroundStyle(selection == index + 1 ? DeAIDesign.controlBackground : DeAIDesign.controlForeground)
+                        .foregroundStyle(selection == index + 1 ? DeAIDesign.text : DeAIDesign.secondaryText)
                         .background {
                             if selection == index + 1 {
+                                let capsule = Capsule().fill(DeAIDesign.surface)
                                 if reduceMotion {
-                                    Capsule().fill(DeAIDesign.controlForeground).transition(.opacity)
+                                    capsule.transition(.opacity)
                                 } else {
-                                    Capsule().fill(DeAIDesign.controlForeground)
-                                        .matchedGeometryEffect(id: "selection", in: highlight)
+                                    capsule.matchedGeometryEffect(id: "selection", in: highlight)
                                 }
+                            }
+                        }
+                        .overlay {
+                            if selection == index + 1 {
+                                Capsule().strokeBorder(DeAIDesign.border, lineWidth: 1)
                             }
                         }
                 }
@@ -177,6 +245,6 @@ struct SensitivityControl: View {
             }
         }
         .padding(5)
-        .background(DeAIDesign.controlBackground, in: Capsule())
+        .background(DeAIDesign.track, in: Capsule())
     }
 }

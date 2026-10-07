@@ -1,4 +1,6 @@
 import AppKit
+import Carbon
+import Combine
 import SwiftUI
 
 struct SettingsView: View {
@@ -8,12 +10,21 @@ struct SettingsView: View {
     /// Outer tab the view opens on (tests mount each pane directly):
     /// 0 = 检查, 1 = 下划线外观, 2 = AI 改写.
     var initialTab: Int
+    /// Live controller when shown from the app — powers the hotkey
+    /// recorder's pause hook and registration-error display.
+    var controller: AppController?
+    /// Capture hook: render the AI tab's recorder in its recording state.
+    var hotkeyRecordingPreview: Bool
     @State private var selectedTab: Int
 
-    init(settings: AppSettings, currentBundleId: String? = nil, initialTab: Int = 0) {
+    init(settings: AppSettings, currentBundleId: String? = nil,
+         initialTab: Int = 0, controller: AppController? = nil,
+         hotkeyRecordingPreview: Bool = false) {
         self.settings = settings
         self.currentBundleId = currentBundleId
         self.initialTab = initialTab
+        self.controller = controller
+        self.hotkeyRecordingPreview = hotkeyRecordingPreview
         _selectedTab = State(initialValue: initialTab)
     }
 
@@ -25,13 +36,17 @@ struct SettingsView: View {
             UnderlineSettingsTab(settings: settings)
                 .tabItem { Label("下划线外观", systemImage: "textformat.underline") }
                 .tag(1)
-            AISettingsTab(settings: settings)
+            AISettingsTab(
+                settings: settings, controller: controller,
+                recordingPreview: hotkeyRecordingPreview
+            )
                 .tabItem { Label("AI 改写", systemImage: "wand.and.stars") }
                 .tag(2)
         }
         .font(DeAIDesign.font())
         .foregroundStyle(DeAIDesign.text)
-        .background(DeAIDesign.canvas)
+        .tint(DeAIDesign.accent)
+        .background(DeAIDesign.background)
         .frame(width: 560, height: 660)
     }
 }
@@ -48,7 +63,7 @@ private struct SettingsSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(title).font(DeAIDesign.font(12, weight: .medium))
+            Text(title).font(DeAIDesign.titleFont(14))
             content
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,6 +71,10 @@ private struct SettingsSection<Content: View>: View {
                     DeAIDesign.surface,
                     in: RoundedRectangle(cornerRadius: DeAIDesign.radius)
                 )
+                .overlay {
+                    RoundedRectangle(cornerRadius: DeAIDesign.radius)
+                        .strokeBorder(DeAIDesign.border, lineWidth: 0.5)
+                }
         }
     }
 }
@@ -77,7 +96,7 @@ private struct SettingsTabScroll<Content: View>: View {
         }
         .font(DeAIDesign.font())
         .foregroundStyle(DeAIDesign.text)
-        .background(DeAIDesign.canvas)
+        .background(DeAIDesign.background)
     }
 }
 
@@ -121,15 +140,15 @@ private struct CheckSettingsTab: View {
                                 Spacer()
                                 Toggle("启用", isOn: groupEnabledBinding(group))
                                     .labelsHidden()
-                                    .toggleStyle(DeAIToggleStyle())
+                                    .toggleStyle(DeAIToggleStyle(showsLabel: false))
                             }
-                            HStack(spacing: 14) {
+                            HStack(spacing: 8) {
                                 ForEach(CheckKind.allCases, id: \.self) { kind in
                                     Toggle(
                                         kind.shortName,
                                         isOn: groupCheckBinding(group, kind)
                                     )
-                                    .toggleStyle(.checkbox)
+                                    .toggleStyle(DeAIChipToggleStyle())
                                 }
                             }
                             .font(DeAIDesign.font(11))
@@ -181,8 +200,8 @@ private struct CheckSettingsTab: View {
                             .textFieldStyle(.plain)
                             .padding(12)
                             .background(
-                                DeAIDesign.canvas,
-                                in: RoundedRectangle(cornerRadius: 12)
+                                DeAIDesign.sidebar,
+                                in: RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
                             )
                             .accessibilityLabel("应用 Bundle ID")
                         Button("添加") {
@@ -191,7 +210,7 @@ private struct CheckSettingsTab: View {
                                 settings.defaultAppRule(for: newBundleId)
                             newBundleId = ""
                         }
-                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                         .disabled(newBundleId.isEmpty)
                         .opacity(newBundleId.isEmpty ? 0.4 : 1)
                     }
@@ -219,7 +238,7 @@ private struct CheckSettingsTab: View {
                                 Button("重新启用") {
                                     settings.disabledRuleIds.remove(id)
                                 }
-                                .buttonStyle(DeAIButtonStyle(compact: true))
+                                .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                             }
                         }
                     }
@@ -348,7 +367,7 @@ private struct UnderlineSettingsTab: View {
                         Button("恢复默认") {
                             settings.underline = .default
                         }
-                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                     }
                 }
             }
@@ -361,6 +380,7 @@ private struct UnderlineSettingsTab: View {
         HStack {
             Text(title)
             Slider(value: value, in: range)
+                .tint(DeAIDesign.secondaryText)
             Text(String(format: "%.1f", value.wrappedValue))
                 .font(DeAIDesign.font(11).monospacedDigit())
                 .frame(width: 32, alignment: .trailing)
@@ -407,6 +427,9 @@ private struct UnderlineSettingsTab: View {
 /// Provider management + hotkey for the AI rewrite feature.
 private struct AISettingsTab: View {
     @ObservedObject var settings: AppSettings
+    var controller: AppController?
+    /// Capture hook: show the recorder mid-recording.
+    var recordingPreview = false
 
     /// API key draft — the saved key is never echoed back into the field.
     @State private var keyDraft = ""
@@ -415,6 +438,15 @@ private struct AISettingsTab: View {
     @State private var customModel = false
     @State private var testing = false
     @State private var testStatus: String?
+    @State private var hotkeyError: String?
+    @State private var showingAddProvider = false
+
+    /// Observes the optional controller's @Published error even though a
+    /// plain `var` can't be @ObservedObject.
+    private var hotkeyErrorPublisher: AnyPublisher<String?, Never> {
+        controller?.$hotkeyError.eraseToAnyPublisher()
+            ?? Just(nil).eraseToAnyPublisher()
+    }
 
     var body: some View {
         SettingsTabScroll {
@@ -448,12 +480,45 @@ private struct AISettingsTab: View {
                             settings.activeProviderId = p.id
                         }
                     }
-                    Menu("添加服务…") {
-                        ForEach(ProviderPreset.allCases, id: \.self) { preset in
-                            Button(preset.label) {
-                                _ = settings.addProvider(preset: preset)
+                    // plain Button + popover: a .borderlessButton Menu renders
+                    // its label through NSPopUpButton, which ignores
+                    // foregroundStyle → black text on dark cards (QA r5).
+                    Button {
+                        showingAddProvider = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("添加服务…")
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(DeAIDesign.font(8, weight: .semibold))
+                        }
+                        .font(DeAIDesign.font(12))
+                        .foregroundStyle(DeAIDesign.text)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            DeAIDesign.surface,
+                            in: RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                                .strokeBorder(DeAIDesign.border, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("添加服务")
+                    .popover(
+                        isPresented: $showingAddProvider, arrowEdge: .bottom
+                    ) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(ProviderPreset.allCases, id: \.self) { preset in
+                                AddProviderRow(preset: preset) {
+                                    _ = settings.addProvider(preset: preset)
+                                    showingAddProvider = false
+                                }
                             }
                         }
+                        .padding(4)
+                        .background(DeAIDesign.background)
                     }
                 }
             }
@@ -461,14 +526,36 @@ private struct AISettingsTab: View {
                 providerEditor(provider)
             }
             SettingsSection("快捷键") {
-                Picker("AI 改写快捷键", selection: $settings.rewriteHotkey) {
-                    ForEach(RewriteHotkey.allCases, id: \.self) { h in
-                        Text(h.label).tag(h)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        Text("AI 改写快捷键")
+                        Spacer()
+                        ShortcutRecorder(
+                            hotkey: $settings.rewriteHotkey,
+                            recording: recordingPreview,
+                            heldModifiers: recordingPreview
+                                ? UInt32(controlKey | optionKey) : 0,
+                            onRecordingChanged: {
+                                controller?.setHotkeyPaused($0)
+                            }
+                        )
+                        Button("恢复默认") {
+                            settings.rewriteHotkey = .default
+                        }
+                        .font(DeAIDesign.font(11))
+                        .foregroundStyle(DeAIDesign.muted)
+                        .buttonStyle(.plain)
+                    }
+                    if let hotkeyError {
+                        Text(hotkeyError)
+                            .font(DeAIDesign.font(11))
+                            .foregroundStyle(DeAIDesign.danger)
                     }
                 }
             }
         }
         .onAppear { refreshKeyState() }
+        .onReceive(hotkeyErrorPublisher) { hotkeyError = $0 }
         .onChange(of: settings.activeProviderId) { _ in refreshKeyState() }
     }
 
@@ -529,7 +616,7 @@ private struct AISettingsTab: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
                     Button("保存") { saveKey() }
-                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                         .disabled(keyDraft.isEmpty && !keySaved)
                     Text(keySaved ? "已保存 ✓" : "未设置")
                         .font(DeAIDesign.font(10))
@@ -537,13 +624,13 @@ private struct AISettingsTab: View {
                 }
                 HStack {
                     Button(testing ? "测试中…" : "测试连接") { testConnection(p) }
-                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                         .disabled(testing)
                     if let testStatus {
                         Text(testStatus)
                             .font(DeAIDesign.font(10))
                             .foregroundStyle(
-                                testStatus.hasPrefix("✓") ? .green : .red
+                                testStatus.hasPrefix("✓") ? DeAIDesign.acceptGreen : DeAIDesign.danger
                             )
                             .lineLimit(2)
                     }
@@ -699,16 +786,28 @@ private final class UnderlinePreviewNSView: NSView {
         refresh()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refresh()
+    }
+
     private func refresh() {
         guard let layer else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer.sublayers?.forEach { $0.removeFromSuperlayer() }
 
+        // BUG-04: a CATextLayer keeps the CGColor baked at build time —
+        // resolve labelColor against OUR effective appearance or the sample
+        // text stays black on the dark preview background.
+        var textColor = NSColor.labelColor.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            textColor = NSColor.labelColor.cgColor
+        }
         let font = NSFont.systemFont(ofSize: 14)
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: NSColor(cgColor: textColor) ?? .labelColor,
         ]
         let categories: [Category] = [.grammar, .aiToneZh, .aiToneEn, .markdown]
         let lines: [(text: String, tier: UInt8)] = [
@@ -756,6 +855,34 @@ private final class UnderlinePreviewNSView: NSView {
             top -= lineHeight
         }
         CATransaction.commit()
+    }
+}
+
+/// Popover row for "添加服务…" — full-width plain button with a sidebar-fill
+/// hover highlight (Claude-style menu row).
+private struct AddProviderRow: View {
+    let preset: ProviderPreset
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(preset.label)
+                .font(DeAIDesign.font(12))
+                .foregroundStyle(DeAIDesign.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: DeAIDesign.controlRadius
+                    )
+                    .fill(hovering ? DeAIDesign.sidebar : .clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 

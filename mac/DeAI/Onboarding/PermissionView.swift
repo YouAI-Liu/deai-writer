@@ -15,7 +15,7 @@ struct PermissionView: View {
             Text("在辅助功能列表中勾选 DeAI，授权后此窗口会自动关闭。")
             .font(DeAIDesign.font(11))
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: 18))
+            .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
             Button {
                 NSWorkspace.shared.open(
                     URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
@@ -32,7 +32,7 @@ struct PermissionView: View {
         .padding(24)
         .frame(width: 420, height: 360)
         .foregroundStyle(DeAIDesign.text)
-        .background(DeAIDesign.canvas)
+        .background(DeAIDesign.background)
     }
 
 }

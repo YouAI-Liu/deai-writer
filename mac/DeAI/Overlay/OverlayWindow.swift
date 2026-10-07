@@ -65,8 +65,8 @@ final class OverlayWindow {
     func hideAll() {
         rendered = []
         for (_, entry) in panels {
-            entry.panel.orderOut(nil)
             entry.view.clear()
+            entry.panel.orderOut(nil)
         }
     }
 
@@ -140,6 +140,9 @@ final class OverlayWindow {
             .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle,
         ]
         panel.isReleasedWhenClosed = false
+        // BUG-R3-01: no shrink/fade on order in/out — hiding during scroll
+        // must be instant
+        panel.animationBehavior = .none
         let view = UnderlineView(frame: NSRect(origin: .zero, size: screen.frame.size))
         view.underlineAppearance = appearance
         panel.contentView = view

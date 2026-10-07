@@ -116,7 +116,7 @@ public final class AppSettings: ObservableObject {
         self.providers = providers
         self.activeProviderId = stored?.activeProviderId
             ?? providers.first?.id
-        self.rewriteHotkey = stored?.rewriteHotkey ?? .ctrlOptR
+        self.rewriteHotkey = stored?.rewriteHotkey ?? .default
         self.userDefaults = userDefaults
         self.secrets = secrets
     }
