@@ -617,7 +617,11 @@ private struct AISettingsTab: View {
                     .frame(width: 200)
                     Button("保存") { saveKey() }
                         .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
-                        .disabled(keyDraft.isEmpty && !keySaved)
+                        .disabled(keyDraft.isEmpty)
+                    if keySaved && keyDraft.isEmpty {
+                        Button("清除") { clearKey() }
+                            .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+                    }
                     Text(keySaved ? "已保存 ✓" : "未设置")
                         .font(DeAIDesign.font(10))
                         .foregroundStyle(keySaved ? .green : DeAIDesign.muted)
@@ -728,13 +732,20 @@ private struct AISettingsTab: View {
         } ?? false
     }
 
+    /// Never deletes: SecureField's onCommit also fires when the field
+    /// merely loses focus, and with the draft already cleared after a save
+    /// that used to wipe the stored key. Deleting is `clearKey()` only.
     private func saveKey() {
-        guard let id = settings.activeProvider?.id else { return }
-        settings.secrets.set(
-            keyDraft.isEmpty ? nil : keyDraft,
-            for: id.uuidString
-        )
+        guard case .save(let key) = KeyAction(draft: keyDraft),
+              let id = settings.activeProvider?.id else { return }
+        settings.secrets.set(key, for: id.uuidString)
         keyDraft = ""
+        keySaved = settings.secrets.get(id.uuidString) != nil
+    }
+
+    private func clearKey() {
+        guard let id = settings.activeProvider?.id else { return }
+        settings.secrets.set(nil, for: id.uuidString)
         keySaved = settings.secrets.get(id.uuidString) != nil
     }
 

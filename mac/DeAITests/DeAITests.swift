@@ -1613,3 +1613,18 @@ final class RectsMovedTests: XCTestCase {
         XCTAssertFalse(AppController.rectsMoved([], []))
     }
 }
+
+final class KeyActionTests: XCTestCase {
+    /// SecureField onCommit fires on focus loss too — an empty draft must
+    /// never reach the store (it used to delete the saved key).
+    func testEmptyAndWhitespaceDraftsAreIgnored() {
+        XCTAssertEqual(KeyAction(draft: ""), .ignore)
+        XCTAssertEqual(KeyAction(draft: "   "), .ignore)
+        XCTAssertEqual(KeyAction(draft: "\n\t "), .ignore)
+    }
+
+    func testNonEmptyDraftSavesTrimmed() {
+        XCTAssertEqual(KeyAction(draft: "sk-abc"), .save("sk-abc"))
+        XCTAssertEqual(KeyAction(draft: "  sk-abc \n"), .save("sk-abc"))
+    }
+}
