@@ -14,57 +14,61 @@ struct ContentView: View {
     @State private var pending: DispatchWorkItem?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TextEditor(text: $text)
-                .font(.body)
-                .frame(minHeight: 140)
+        VStack(alignment: .leading, spacing: 22) {
             HStack {
-                Toggle("Grammar", isOn: $grammar)
-                Toggle("AI tone EN", isOn: $aiToneEn)
-                Toggle("AI tone 中文", isOn: $aiToneZh)
+                Text("规则测试")
+                    .font(DeAIDesign.font(26, weight: .semibold)).tracking(-0.8)
+                Spacer()
+                Text("\(findings.count) 条提示")
+                    .font(DeAIDesign.font(11)).foregroundStyle(DeAIDesign.muted)
+            }
+            TextEditor(text: $text)
+                .font(DeAIDesign.font(15)).scrollContentBackground(.hidden)
+                .padding(16).frame(minHeight: 140)
+                .background(DeAIDesign.paper, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+            HStack(spacing: 20) {
+                Toggle("语法", isOn: $grammar)
+                Toggle("英文 AI 腔", isOn: $aiToneEn)
+                Toggle("中文 AI 腔", isOn: $aiToneZh)
                 Toggle("Markdown", isOn: $markdown)
             }
+            .font(DeAIDesign.font(11)).toggleStyle(DeAIToggleStyle())
             HStack {
-                Picker("敏感度", selection: $sensitivity) {
-                    Text("严格").tag(1)
-                    Text("标准").tag(2)
-                    Text("敏感").tag(3)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 220)
+                SensitivityControl(selection: $sensitivity).frame(width: 230)
                 Spacer()
                 Button("清除 Markdown") {
                     text = stripMarkdown(text: text, opts: currentOptions())
                 }
+                .buttonStyle(DeAIButtonStyle())
             }
-            List(findings, id: \.self) { finding in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(categoryName(finding.category))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(finding.ruleId)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Text("tier \(finding.tier)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("[\(finding.start), \(finding.end)) “\(excerpt(finding))”")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(finding.message)
-                    if !finding.suggestions.isEmpty {
-                        Text("Suggestions: \(finding.suggestions.joined(separator: ", "))")
-                            .font(.callout)
-                            .foregroundStyle(.blue)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(findings, id: \.self) { finding in
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                SecondaryLabel(categoryName(finding.category))
+                                Spacer()
+                                SecondaryLabel(finding.ruleId)
+                            }
+                            Text(finding.message).font(DeAIDesign.font(14, weight: .medium))
+                            Text("原文：\(excerpt(finding))")
+                                .font(DeAIDesign.font(12)).foregroundStyle(DeAIDesign.muted)
+                            if !finding.suggestions.isEmpty {
+                                Text("建议：\(finding.suggestions.joined(separator: " / "))")
+                                    .font(DeAIDesign.font(12))
+                            }
+                        }
+                        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(DeAIDesign.paper, in: RoundedRectangle(cornerRadius: 20))
                     }
                 }
             }
         }
-        .padding()
-        .frame(minWidth: 560, minHeight: 420)
+        .padding(30)
+        .foregroundStyle(DeAIDesign.ink)
+        .background(DeAIDesign.canvas)
+        .preferredColorScheme(.light)
+        .frame(minWidth: 700, minHeight: 620)
         .onAppear(perform: schedule)
         .onChange(of: text) { _, _ in schedule() }
         .onChange(of: grammar) { _, _ in schedule() }
@@ -108,9 +112,9 @@ struct ContentView: View {
 
     private func categoryName(_ category: Category) -> String {
         switch category {
-        case .grammar: "Grammar"
-        case .aiToneEn: "AI tone (EN)"
-        case .aiToneZh: "AI tone (中文)"
+        case .grammar: "语法"
+        case .aiToneEn: "英文 AI 腔"
+        case .aiToneZh: "中文 AI 腔"
         case .markdown: "Markdown"
         }
     }

@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 @testable import DeAI
 
@@ -943,5 +945,78 @@ final class MemoryHarnessTests: XCTestCase {
             "2,000 check cycles grew footprint by \(String(format: "%.1f", mib)) MiB"
         )
         print("MEM: 2,000 cycles, footprint growth \(String(format: "%.1f", mib)) MiB")
+    }
+}
+
+final class SuggestionCardModelTests: XCTestCase {
+    private func model() -> SuggestionCardModel {
+        SuggestionCardModel(
+            finding: Finding(category: .markdown, ruleId: "md.bold", message: "移除粗体标记",
+                             start: 0, end: 8, suggestions: ["粗体"], tier: 1),
+            matchedText: "**粗体**"
+        )
+    }
+
+    func testRepeatedApplyCallsReplacementOnlyOnce() {
+        let model = model()
+        var calls = 0
+        model.onApply = { _, _ in calls += 1 }
+        model.apply("粗体")
+        model.apply("粗体")
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(model.phase, .loading)
+    }
+
+    func testFailedReplacementDoesNotShowSuccess() {
+        let model = model()
+        model.onApply = { _, completion in completion(false) }
+        model.apply("粗体")
+        let checked = expectation(description: "verified failure")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            XCTAssertEqual(model.phase, .failure)
+            checked.fulfill()
+        }
+        wait(for: [checked], timeout: 1)
+    }
+
+    func testPreviousCompletionCannotChangeNewFinding() {
+        let model = model()
+        var finish: ((Bool) -> Void)?
+        model.onApply = { _, completion in finish = completion }
+        model.apply("粗体")
+        model.update(finding: model.finding, matchedText: "新的文字")
+        finish?(true)
+        let checked = expectation(description: "old result ignored")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            XCTAssertEqual(model.phase, .idle)
+            XCTAssertEqual(model.matchedText, "新的文字")
+            checked.fulfill()
+        }
+        wait(for: [checked], timeout: 1)
+    }
+}
+
+final class SuggestionCardPanelTests: XCTestCase {
+    func testSwitchingFindingReusesPanelAndFitsLongContent() {
+        let card = SuggestionCardPanel()
+        defer { card.dismiss() }
+        func show(_ text: String) {
+            card.show(
+                finding: Finding(category: .markdown, ruleId: "md.bold", message: "Markdown 残留：加粗",
+                                 start: 0, end: UInt32(text.utf16.count), suggestions: [text], tier: 1),
+                matchedText: text, near: CGRect(x: 300, y: 600, width: 40, height: 20),
+                onApply: { _, completion in completion(true) }, onIgnore: {}, onDisableRule: {}, onDismiss: {}
+            )
+        }
+        show("粗体")
+        let first = NSApp.windows.first { $0.contentView is NSHostingView<SuggestionCardView> }
+        XCTAssertNotNil(first)
+        let shortHeight = first?.frame.height ?? 0
+        show(String(repeating: "长文本，", count: 400))
+        let second = NSApp.windows.first { $0.contentView is NSHostingView<SuggestionCardView> }
+        XCTAssertTrue(first === second)
+        XCTAssertGreaterThan(second?.frame.height ?? 0, shortHeight)
+        XCTAssertLessThan(second?.frame.height ?? 1000, 600)
+        XCTAssertEqual(card.current?.matchedText.count, 1600)
     }
 }

@@ -315,7 +315,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             let stillThere = state.findings.contains {
                 $0.ruleId == ctx.ruleId && $0.start == ctx.start && $0.end == ctx.end
             }
-            if !stillThere {
+            if !stillThere && !card.isPresentingApplication {
                 card.dismiss()
             }
         }
@@ -426,10 +426,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             finding: finding,
             matchedText: matched,
             near: rect,
-            onApply: { [weak self] replacement in
+            onApply: { [weak self] replacement, completion in
                 self?.applyReplacement(
                     key: key, finding: finding,
-                    matched: matched, replacement: replacement
+                    matched: matched, replacement: replacement,
+                    completion: completion
                 )
             },
             onIgnore: { [weak self] in
@@ -463,9 +464,10 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     private func applyReplacement(
-        key: UInt64, finding: Finding, matched: String, replacement: String
+        key: UInt64, finding: Finding, matched: String, replacement: String,
+        completion: ((Bool) -> Void)? = nil
     ) {
-        guard let state = states[key] else { return }
+        guard let state = states[key] else { completion?(false); return }
         TextReplacer.apply(
             element: state.target.element,
             finding: finding,
@@ -476,6 +478,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         ) { [weak self] result in
             // completion arrives after the write is verified (pasteboard and
             // delete-key paths poll the element's text; BUG-11)
+            completion?(result.success)
             self?.lastReplacement = (result.path.rawValue, result.success)
             self?.writeDebugState()
         }

@@ -5,14 +5,9 @@ import QuartzCore
 /// Coordinates are Cocoa (bottom-left origin) screen coordinates; the view is
 /// placed in a per-screen panel whose frame equals the screen frame.
 final class UnderlineView: NSView {
-    /// Category colors per spec.
+    /// A single muted terracotta accent remains visible on light and dark hosts.
     static func color(for category: Category) -> CGColor {
-        switch category {
-        case .grammar: return NSColor(srgbRed: 0.898, green: 0.282, blue: 0.302, alpha: 1).cgColor // #E5484D
-        case .aiToneZh: return NSColor(srgbRed: 0.557, green: 0.306, blue: 0.776, alpha: 1).cgColor // #8E4EC6
-        case .aiToneEn: return NSColor(srgbRed: 0.0, green: 0.565, blue: 1.0, alpha: 1).cgColor // #0090FF
-        case .markdown: return NSColor(srgbRed: 0.545, green: 0.553, blue: 0.596, alpha: 1).cgColor // #8B8D98
-        }
+        NSColor(srgbRed: 168 / 255, green: 105 / 255, blue: 68 / 255, alpha: 1).cgColor
     }
 
     /// Screen-space panel origin (the panel's frame origin in Cocoa coords).
@@ -71,7 +66,7 @@ final class UnderlineView: NSView {
         let shape = CAShapeLayer()
         shape.strokeColor = Self.color(for: f.category)
         shape.fillColor = .clear
-        shape.lineWidth = 1.2
+        shape.lineWidth = 1.4
         shape.lineCap = .round
         if f.tier == 3 {
             shape.lineDashPattern = [3, 3]
