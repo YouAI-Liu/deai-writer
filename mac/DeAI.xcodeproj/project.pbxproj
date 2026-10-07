@@ -21,10 +21,12 @@
 		4E70BC20826B2F0A6B330818 /* LLMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E1835E82BEF929FBAA4FFC0 /* LLMClient.swift */; };
 		53AC67001400AA38D6544BE9 /* RewriteScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B1A3B3DD7FCE00F958A250 /* RewriteScope.swift */; };
 		543B5E85FE68B05D17ABF35B /* TextTargetResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8A2EF7F8118937C86B67CA /* TextTargetResolver.swift */; };
+		5A3E6555CDB2F323817556A4 /* DebugUIShowcase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620319D7F40972C2D12D6898 /* DebugUIShowcase.swift */; };
 		643595E12A10B7BD87DB1124 /* TextGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77AC0F3149356B34758A1540 /* TextGeometry.swift */; };
 		643FA5DC30F64AB69996F21C /* TextReplacer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC94C6D7E9990F20CB3AAE5 /* TextReplacer.swift */; };
 		7E171612304775F1268EAD5D /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4712B5A62B8F80DFDC3368E2 /* AppSettings.swift */; };
 		7E2C032283696344D4CB7FAD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694283D53AC8F23B940F5360 /* SettingsView.swift */; };
+		857FF9ACF5EEDDCEEC34BDA9 /* DeAIDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 880F92DF93466ED427FE9D36 /* DeAIDesign.swift */; };
 		9AB4B38B3DDA96EAFF30BDC0 /* CheckService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35D5A0052CE6F411AC885598 /* CheckService.swift */; };
 		9B85E1FE0BCC45C707FF5E75 /* ClickMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6C5930CBA4ACFE284B81B1 /* ClickMonitor.swift */; };
 		AD66C67B1B110273B18198E5 /* OverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 648D3A4E6DBEA10E84D355CE /* OverlayWindow.swift */; };
@@ -61,6 +63,7 @@
 		55C01034708A5818B403025D /* DeAICoreFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = DeAICoreFFI.modulemap; sourceTree = "<group>"; };
 		5B481840E0EB9048B7E9802D /* DeAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CCC5C88F697ADBCC98A01AC /* ParagraphGrammarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParagraphGrammarCache.swift; sourceTree = "<group>"; };
+		620319D7F40972C2D12D6898 /* DebugUIShowcase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugUIShowcase.swift; sourceTree = "<group>"; };
 		648D3A4E6DBEA10E84D355CE /* OverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayWindow.swift; sourceTree = "<group>"; };
 		657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnderlineAppearance.swift; sourceTree = "<group>"; };
 		66254E52FD4AA98A00E50DD1 /* SuggestionCardPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCardPanel.swift; sourceTree = "<group>"; };
@@ -70,6 +73,7 @@
 		77AC0F3149356B34758A1540 /* TextGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextGeometry.swift; sourceTree = "<group>"; };
 		7D3B9A4C6E1611917FAAF08D /* ProviderConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderConfig.swift; sourceTree = "<group>"; };
 		7E7DE3B50753C53D6332149B /* PermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionView.swift; sourceTree = "<group>"; };
+		880F92DF93466ED427FE9D36 /* DeAIDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAIDesign.swift; sourceTree = "<group>"; };
 		88C5891B17763F9E5DDE37C3 /* RewritePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewritePanel.swift; sourceTree = "<group>"; };
 		9B9B656910EE1ECB8B4F7574 /* FocusTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusTracker.swift; sourceTree = "<group>"; };
 		A7A160E60D2C7FDD627F0103 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -183,6 +187,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		937DA4A85F2B5AA25ABAA72F /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				880F92DF93466ED427FE9D36 /* DeAIDesign.swift */,
+				620319D7F40972C2D12D6898 /* DebugUIShowcase.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
 		BCF4C6CBC31FD89C1C1E78D6 /* DeAITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -200,6 +213,7 @@
 				40366506EBEFAAE92BBE3814 /* App */,
 				0FECD8FF92624C061BF29292 /* AX */,
 				CBA7251CF9F4E91ADD35F115 /* Check */,
+				937DA4A85F2B5AA25ABAA72F /* Design */,
 				8AA55475DD497BF2EF034A8E /* Onboarding */,
 				CCA364A295EEF52D19B650F4 /* Overlay */,
 				EA992A3F3940D734F9F830B2 /* Settings */,
@@ -338,6 +352,8 @@
 				EF793542DDE1494985A2A042 /* ContentView.swift in Sources */,
 				D8DC8633CAC8170AACB37EC1 /* DeAIApp.swift in Sources */,
 				CC0A949819225BC6F704BBF8 /* DeAICore.swift in Sources */,
+				857FF9ACF5EEDDCEEC34BDA9 /* DeAIDesign.swift in Sources */,
+				5A3E6555CDB2F323817556A4 /* DebugUIShowcase.swift in Sources */,
 				D9B40DB6DA15B2AF953236A6 /* FocusTracker.swift in Sources */,
 				B28C2B3C7F046EB1D254A18F /* GlobalHotkey.swift in Sources */,
 				4E70BC20826B2F0A6B330818 /* LLMClient.swift in Sources */,

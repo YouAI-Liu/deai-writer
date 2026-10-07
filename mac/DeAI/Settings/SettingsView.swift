@@ -5,263 +5,227 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     /// Frontmost non-DeAI app bundle id (for "add current app").
     var currentBundleId: String?
-    /// Tab inside 检查 the view opens on (tests mount each pane directly).
+    /// Outer tab the view opens on (tests mount each pane directly):
+    /// 0 = 检查, 1 = 下划线外观, 2 = AI 改写.
     var initialTab: Int
+    @State private var selectedTab: Int
 
     init(settings: AppSettings, currentBundleId: String? = nil, initialTab: Int = 0) {
         self.settings = settings
         self.currentBundleId = currentBundleId
         self.initialTab = initialTab
-    }
-
-    var body: some View {
-        TabView {
-            CheckSettingsTab(
-                settings: settings, currentBundleId: currentBundleId,
-                initialTab: initialTab
-            )
-            .tabItem { Label("检查", systemImage: "checklist") }
-            AISettingsTab(settings: settings)
-                .tabItem { Label("AI 改写", systemImage: "wand.and.stars") }
-        }
-        .frame(width: 560, height: 620)
-    }
-}
-
-/// The original settings content — unchanged, just moved into a tab.
-private struct CheckSettingsTab: View {
-    @ObservedObject var settings: AppSettings
-    var currentBundleId: String?
-
-    @State private var newBundleId = ""
-    @State private var selectedTab: Int
-
-    private static let categories: [Category] = [.grammar, .aiToneZh, .aiToneEn, .markdown]
-
-    init(settings: AppSettings, currentBundleId: String? = nil, initialTab: Int = 0) {
-        self.settings = settings
-        self.currentBundleId = currentBundleId
         _selectedTab = State(initialValue: initialTab)
     }
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            checksTab
-                .tabItem { Label("检查", systemImage: "checkmark.circle") }
+            CheckSettingsTab(settings: settings, currentBundleId: currentBundleId)
+                .tabItem { Label("检查", systemImage: "checklist") }
                 .tag(0)
-            underlineTab
-                .tabItem { Label("下划线样式", systemImage: "textformat.underline") }
+            UnderlineSettingsTab(settings: settings)
+                .tabItem { Label("下划线外观", systemImage: "textformat.underline") }
                 .tag(1)
-            appsTab
-                .tabItem { Label("应用", systemImage: "app.badge.checkmark") }
+            AISettingsTab(settings: settings)
+                .tabItem { Label("AI 改写", systemImage: "wand.and.stars") }
                 .tag(2)
         }
-        .frame(minWidth: 560, idealWidth: 560, minHeight: 620)
+        .font(DeAIDesign.font())
+        .foregroundStyle(DeAIDesign.text)
+        .background(DeAIDesign.canvas)
+        .frame(width: 560, height: 660)
+    }
+}
+
+/// Titled card section shared by every settings tab (DeAIDesign surface).
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
     }
 
-    // MARK: - 检查
-
-    private var checksTab: some View {
-        Form {
-            Section("检查类别") {
-                Toggle("语法 (Grammar)", isOn: $settings.grammar)
-                Toggle("中文 AI 腔", isOn: $settings.aiToneZh)
-                Toggle("英文 AI 腔", isOn: $settings.aiToneEn)
-                Toggle("Markdown 残留", isOn: $settings.markdown)
-            }
-            Section("敏感度") {
-                Picker("敏感度", selection: $settings.sensitivity) {
-                    Text("严格").tag(1)
-                    Text("标准").tag(2)
-                    Text("敏感").tag(3)
-                }
-                .pickerStyle(.segmented)
-            }
-            Section("已停用规则") {
-                if settings.disabledRuleIds.isEmpty {
-                    Text("无").foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(settings.disabledRuleIds).sorted(), id: \.self) { id in
-                        HStack {
-                            Text(id).font(.callout.monospaced())
-                            Spacer()
-                            Button("重新启用") {
-                                settings.disabledRuleIds.remove(id)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    // MARK: - 下划线样式
-
-    private var underlineTab: some View {
-        Form {
-            Section("预览") {
-                UnderlinePreview(appearance: settings.underline)
-                    .frame(height: 64)
-            }
-            Section("分类样式") {
-                ForEach(Self.categories, id: \.self) { category in
-                    HStack {
-                        Text(category.displayName)
-                        Spacer()
-                        ColorPicker(
-                            "颜色",
-                            selection: colorBinding(for: category),
-                            supportsOpacity: false
-                        )
-                        .labelsHidden()
-                        Picker("线型", selection: shapeBinding(for: category)) {
-                            ForEach(UnderlineShape.allCases, id: \.self) { shape in
-                                Text(shape.displayName).tag(shape)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 96)
-                    }
-                }
-            }
-            Section("全局") {
-                sliderRow("粗细", value: $settings.underline.thickness, range: 0.5...4)
-                sliderRow("不透明度", value: $settings.underline.opacity, range: 0.2...1)
-                sliderRow("距离", value: $settings.underline.offset, range: -2...4)
-                Toggle("低置信度显示为虚线", isOn: $settings.underline.dimLowConfidence)
-                Toggle("背景高亮", isOn: $settings.underline.highlightFill)
-                HStack {
-                    Spacer()
-                    Button("恢复默认") {
-                        settings.underline = .default
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private func sliderRow(
-        _ title: String, value: Binding<Double>, range: ClosedRange<Double>
-    ) -> some View {
-        HStack {
-            Text(title)
-            Slider(value: value, in: range)
-            Text(String(format: "%.1f", value.wrappedValue))
-                .font(.callout.monospacedDigit())
-                .frame(width: 32, alignment: .trailing)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title).font(DeAIDesign.font(12, weight: .medium))
+            content
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    DeAIDesign.surface,
+                    in: RoundedRectangle(cornerRadius: DeAIDesign.radius)
+                )
         }
     }
+}
 
-    private func colorBinding(for category: Category) -> Binding<Color> {
-        Binding(
-            get: { Color(hex: settings.underline.style(for: category).colorHex) },
-            set: { newColor in
-                var style = settings.underline.style(for: category)
-                style.colorHex = newColor.hexString ?? style.colorHex
-                var appearance = settings.underline
-                appearance.styles[UnderlineAppearance.key(for: category)] = style
-                settings.underline = appearance
-            }
-        )
+/// Scroll container shared by every settings tab.
+private struct SettingsTabScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
     }
 
-    private func shapeBinding(for category: Category) -> Binding<UnderlineShape> {
-        Binding(
-            get: { settings.underline.style(for: category).shape },
-            set: { newShape in
-                var style = settings.underline.style(for: category)
-                style.shape = newShape
-                var appearance = settings.underline
-                appearance.styles[UnderlineAppearance.key(for: category)] = style
-                settings.underline = appearance
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                content
             }
-        )
+            .padding(30)
+        }
+        .font(DeAIDesign.font())
+        .foregroundStyle(DeAIDesign.text)
+        .background(DeAIDesign.canvas)
     }
+}
 
-    // MARK: - 应用
+// MARK: - 检查
 
-    private var appsTab: some View {
-        Form {
-            Section("应用类型") {
-                ForEach(AppGroup.allCases, id: \.self) { group in
-                    let rule = settings.groupRules[group]
-                        ?? AppGroup.defaultRule(for: group)
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(group.displayName)
-                                Text(group.examples)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+/// Check categories, sensitivity, app-type groups, per-app exceptions and
+/// disabled rules.
+private struct CheckSettingsTab: View {
+    @ObservedObject var settings: AppSettings
+    var currentBundleId: String?
+
+    @State private var newBundleId = ""
+
+    var body: some View {
+        SettingsTabScroll {
+            SettingsSection("检查类别") {
+                VStack(spacing: 18) {
+                    Toggle("语法 (Grammar)", isOn: $settings.grammar)
+                    Toggle("中文 AI 腔", isOn: $settings.aiToneZh)
+                    Toggle("英文 AI 腔", isOn: $settings.aiToneEn)
+                    Toggle("Markdown 残留", isOn: $settings.markdown)
+                }
+                .toggleStyle(DeAIToggleStyle())
+            }
+            SettingsSection("敏感度") {
+                SensitivityControl(selection: $settings.sensitivity)
+            }
+            SettingsSection("应用类型") {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(AppGroup.allCases, id: \.self) { group in
+                        let rule = settings.groupRules[group]
+                            ?? AppGroup.defaultRule(for: group)
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(group.displayName)
+                                    Text(group.examples)
+                                        .font(DeAIDesign.font(10))
+                                        .foregroundStyle(DeAIDesign.muted)
+                                }
+                                Spacer()
+                                Toggle("启用", isOn: groupEnabledBinding(group))
+                                    .labelsHidden()
+                                    .toggleStyle(DeAIToggleStyle())
                             }
-                            Spacer()
-                            Toggle("启用", isOn: groupEnabledBinding(group))
-                                .labelsHidden()
-                        }
-                        HStack(spacing: 14) {
-                            ForEach(CheckKind.allCases, id: \.self) { kind in
-                                Toggle(
-                                    kind.shortName,
-                                    isOn: groupCheckBinding(group, kind)
-                                )
-                                .toggleStyle(.checkbox)
+                            HStack(spacing: 14) {
+                                ForEach(CheckKind.allCases, id: \.self) { kind in
+                                    Toggle(
+                                        kind.shortName,
+                                        isOn: groupCheckBinding(group, kind)
+                                    )
+                                    .toggleStyle(.checkbox)
+                                }
                             }
+                            .font(DeAIDesign.font(11))
+                            .disabled(!rule.enabled)
                         }
-                        .disabled(!rule.enabled)
                     }
                 }
             }
-            Section("单个应用例外") {
-                ForEach(settings.sortedAppRules, id: \.key) { entry in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(entry.key)
-                                .font(.callout.monospaced())
-                            Text(
-                                (entry.value.enabled
-                                    ? (entry.value.markdown ? "启用" : "启用(不含 Markdown)")
-                                    : "停用")
-                                    + " · \(AppGroup.group(for: entry.key).displayName)"
+            SettingsSection("单个应用例外") {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(settings.sortedAppRules, id: \.key) { entry in
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(entry.key)
+                                        .font(DeAIDesign.font(12))
+                                        .textSelection(.enabled)
+                                    Text(
+                                        (entry.value.enabled
+                                            ? (entry.value.markdown
+                                                ? "启用" : "启用(不含 Markdown)")
+                                            : "停用")
+                                            + " · \(AppGroup.group(for: entry.key).displayName)"
+                                    )
+                                    .font(DeAIDesign.font(10))
+                                    .foregroundStyle(DeAIDesign.muted)
+                                }
+                                Spacer()
+                                Button {
+                                    settings.appRules.removeValue(forKey: entry.key)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(DeAIDesign.font(12, weight: .medium))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(DeAIDesign.muted)
+                                .accessibilityLabel("移除 \(entry.key)")
+                            }
+                            HStack(spacing: 24) {
+                                Toggle("启用", isOn: binding(for: entry.key, enabled: true))
+                                Toggle("Markdown", isOn: binding(for: entry.key, enabled: false))
+                            }
+                            .toggleStyle(DeAIToggleStyle())
+                            Divider()
+                        }
+                    }
+                    HStack(spacing: 10) {
+                        TextField("bundle id (例如 com.apple.TextEdit)", text: $newBundleId)
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(
+                                DeAIDesign.canvas,
+                                in: RoundedRectangle(cornerRadius: 12)
                             )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("应用 Bundle ID")
+                        Button("添加") {
+                            guard !newBundleId.isEmpty else { return }
+                            settings.appRules[newBundleId] =
+                                settings.defaultAppRule(for: newBundleId)
+                            newBundleId = ""
                         }
-                        Spacer()
-                        Toggle("启用", isOn: binding(for: entry.key, enabled: true))
-                            .labelsHidden()
-                        Toggle("MD", isOn: binding(for: entry.key, enabled: false))
-                            .labelsHidden()
-                            .help("Markdown 检查")
-                        Button(role: .destructive) {
-                            settings.appRules.removeValue(forKey: entry.key)
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .disabled(newBundleId.isEmpty)
+                        .opacity(newBundleId.isEmpty ? 0.4 : 1)
                     }
-                }
-                HStack {
-                    TextField("bundle id (例如 com.apple.TextEdit)", text: $newBundleId)
-                        .textFieldStyle(.roundedBorder)
-                    Button("添加") {
-                        guard !newBundleId.isEmpty else { return }
-                        settings.appRules[newBundleId] =
-                            settings.defaultAppRule(for: newBundleId)
-                        newBundleId = ""
-                    }
-                    .disabled(newBundleId.isEmpty)
                     if let cur = currentBundleId, !cur.isEmpty {
                         Button("添加当前应用") {
                             settings.appRules[cur] = settings.defaultAppRule(for: cur)
                         }
+                        .buttonStyle(.plain)
+                        .underline()
+                    }
+                }
+            }
+            SettingsSection("已停用规则") {
+                VStack(alignment: .leading, spacing: 14) {
+                    if settings.disabledRuleIds.isEmpty {
+                        Text("无已停用规则")
+                            .foregroundStyle(DeAIDesign.muted)
+                    } else {
+                        ForEach(Array(settings.disabledRuleIds).sorted(), id: \.self) { id in
+                            HStack {
+                                Text(id)
+                                    .font(DeAIDesign.font(12))
+                                    .textSelection(.enabled)
+                                Spacer()
+                                Button("重新启用") {
+                                    settings.disabledRuleIds.remove(id)
+                                }
+                                .buttonStyle(DeAIButtonStyle(compact: true))
+                            }
+                        }
                     }
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     private func groupEnabledBinding(_ group: AppGroup) -> Binding<Bool> {
@@ -308,6 +272,138 @@ private struct CheckSettingsTab: View {
     }
 }
 
+// MARK: - 下划线外观
+
+/// Underline appearance editor with live preview. An empty `colorHex`
+/// means 跟随主题 — the color well shows the resolved palette color and a
+/// per-category reset restores it.
+private struct UnderlineSettingsTab: View {
+    @ObservedObject var settings: AppSettings
+
+    private static let categories: [Category] = [.grammar, .aiToneZh, .aiToneEn, .markdown]
+
+    var body: some View {
+        SettingsTabScroll {
+            SettingsSection("预览") {
+                UnderlinePreview(appearance: settings.underline)
+                    .frame(height: 64)
+            }
+            SettingsSection("分类样式") {
+                VStack(spacing: 16) {
+                    ForEach(Self.categories, id: \.self) { category in
+                        HStack {
+                            Text(category.displayName)
+                            Spacer()
+                            if settings.underline.style(for: category).colorHex.isEmpty {
+                                Button("跟随主题") {
+                                    // already following; keeps the label tappable/consistent
+                                }
+                                .buttonStyle(.plain)
+                                .font(DeAIDesign.font(10))
+                                .foregroundStyle(DeAIDesign.muted)
+                                .disabled(true)
+                            } else {
+                                Button("跟随主题") {
+                                    var style = settings.underline.style(for: category)
+                                    style.colorHex = ""
+                                    var appearance = settings.underline
+                                    appearance.styles[
+                                        UnderlineAppearance.key(for: category)
+                                    ] = style
+                                    settings.underline = appearance
+                                }
+                                .buttonStyle(.plain)
+                                .font(DeAIDesign.font(10))
+                                .underline()
+                            }
+                            ColorPicker(
+                                "颜色",
+                                selection: colorBinding(for: category),
+                                supportsOpacity: false
+                            )
+                            .labelsHidden()
+                            Picker("线型", selection: shapeBinding(for: category)) {
+                                ForEach(UnderlineShape.allCases, id: \.self) { shape in
+                                    Text(shape.displayName).tag(shape)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 96)
+                        }
+                    }
+                }
+            }
+            SettingsSection("全局") {
+                VStack(spacing: 16) {
+                    sliderRow("粗细", value: $settings.underline.thickness, range: 0.5...4)
+                    sliderRow("不透明度", value: $settings.underline.opacity, range: 0.2...1)
+                    sliderRow("距离", value: $settings.underline.offset, range: -2...4)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("低置信度显示为虚线", isOn: $settings.underline.dimLowConfidence)
+                        Toggle("背景高亮", isOn: $settings.underline.highlightFill)
+                    }
+                    .toggleStyle(DeAIToggleStyle())
+                    HStack {
+                        Spacer()
+                        Button("恢复默认") {
+                            settings.underline = .default
+                        }
+                        .buttonStyle(DeAIButtonStyle(compact: true))
+                    }
+                }
+            }
+        }
+    }
+
+    private func sliderRow(
+        _ title: String, value: Binding<Double>, range: ClosedRange<Double>
+    ) -> some View {
+        HStack {
+            Text(title)
+            Slider(value: value, in: range)
+            Text(String(format: "%.1f", value.wrappedValue))
+                .font(DeAIDesign.font(11).monospacedDigit())
+                .frame(width: 32, alignment: .trailing)
+        }
+    }
+
+    /// The well always shows the resolved color: the theme palette color
+    /// when the style is 跟随主题 (`colorHex == ""`), the override otherwise.
+    private func colorBinding(for category: Category) -> Binding<Color> {
+        Binding(
+            get: {
+                let hex = settings.underline.style(for: category).colorHex
+                if hex.isEmpty {
+                    return Color(nsColor: DeAIDesign.underlineColor(for: category))
+                }
+                return Color(hex: hex)
+            },
+            set: { newColor in
+                var style = settings.underline.style(for: category)
+                style.colorHex = newColor.hexString ?? style.colorHex
+                var appearance = settings.underline
+                appearance.styles[UnderlineAppearance.key(for: category)] = style
+                settings.underline = appearance
+            }
+        )
+    }
+
+    private func shapeBinding(for category: Category) -> Binding<UnderlineShape> {
+        Binding(
+            get: { settings.underline.style(for: category).shape },
+            set: { newShape in
+                var style = settings.underline.style(for: category)
+                style.shape = newShape
+                var appearance = settings.underline
+                appearance.styles[UnderlineAppearance.key(for: category)] = style
+                settings.underline = appearance
+            }
+        )
+    }
+}
+
+// MARK: - AI 改写
+
 /// Provider management + hotkey for the AI rewrite feature.
 private struct AISettingsTab: View {
     @ObservedObject var settings: AppSettings
@@ -321,38 +417,42 @@ private struct AISettingsTab: View {
     @State private var testStatus: String?
 
     var body: some View {
-        Form {
-            Section("服务") {
-                ForEach(settings.providers) { p in
-                    HStack {
-                        Image(
-                            systemName: p.id == settings.activeProviderId
-                                ? "checkmark.circle.fill" : "circle"
-                        )
-                        .foregroundStyle(.tint)
-                        VStack(alignment: .leading) {
-                            Text(p.name).font(.callout)
-                            Text(p.model.isEmpty ? p.preset.label : p.model)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+        SettingsTabScroll {
+            SettingsSection("服务") {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(settings.providers) { p in
+                        HStack {
+                            Image(
+                                systemName: p.id == settings.activeProviderId
+                                    ? "checkmark.circle.fill" : "circle"
+                            )
+                            .foregroundStyle(.tint)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.name).font(DeAIDesign.font(12))
+                                Text(p.model.isEmpty ? p.preset.label : p.model)
+                                    .font(DeAIDesign.font(10))
+                                    .foregroundStyle(DeAIDesign.muted)
+                            }
+                            Spacer()
+                            Button {
+                                settings.deleteProvider(id: p.id)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(DeAIDesign.font(12, weight: .medium))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(DeAIDesign.muted)
                         }
-                        Spacer()
-                        Button(role: .destructive) {
-                            settings.deleteProvider(id: p.id)
-                        } label: {
-                            Image(systemName: "trash")
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            settings.activeProviderId = p.id
                         }
-                        .buttonStyle(.borderless)
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        settings.activeProviderId = p.id
-                    }
-                }
-                Menu("添加服务…") {
-                    ForEach(ProviderPreset.allCases, id: \.self) { preset in
-                        Button(preset.label) {
-                            _ = settings.addProvider(preset: preset)
+                    Menu("添加服务…") {
+                        ForEach(ProviderPreset.allCases, id: \.self) { preset in
+                            Button(preset.label) {
+                                _ = settings.addProvider(preset: preset)
+                            }
                         }
                     }
                 }
@@ -360,7 +460,7 @@ private struct AISettingsTab: View {
             if let provider = settings.activeProvider {
                 providerEditor(provider)
             }
-            Section("快捷键") {
+            SettingsSection("快捷键") {
                 Picker("AI 改写快捷键", selection: $settings.rewriteHotkey) {
                     ForEach(RewriteHotkey.allCases, id: \.self) { h in
                         Text(h.label).tag(h)
@@ -368,82 +468,85 @@ private struct AISettingsTab: View {
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear { refreshKeyState() }
         .onChange(of: settings.activeProviderId) { _ in refreshKeyState() }
     }
 
     @ViewBuilder
     private func providerEditor(_ p: ProviderConfig) -> some View {
-        Section("配置 — \(p.name)") {
-            HStack {
-                Text("名称")
-                Spacer()
-                TextField("名称", text: providerBinding(p.id, \.name))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 280)
-            }
-            HStack {
-                Text("接口格式")
-                Spacer()
-                Picker(
-                    "接口格式",
-                    selection: providerBinding(
-                        p.id, \.format, fallback: .openAIChat
-                    )
-                ) {
-                    ForEach(APIFormat.allCases, id: \.self) { f in
-                        Text(f.label).tag(f)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 280)
-                // OpenCode Go derives the format from the chosen model
-                .disabled(p.preset == .opencodeGo && !customModel)
-            }
-            HStack {
-                Text("Base URL")
-                Spacer()
-                TextField("https://…", text: providerBinding(p.id, \.baseURL))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 280)
-            }
-            if p.preset == .opencodeGo {
-                modelPicker(p)
-            } else {
+        SettingsSection("配置 — \(p.name)") {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("模型")
+                    Text("名称")
                     Spacer()
-                    TextField("模型 id", text: providerBinding(p.id, \.model))
+                    TextField("名称", text: providerBinding(p.id, \.name))
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 280)
                 }
-            }
-            HStack {
-                Text("API Key")
-                Spacer()
-                SecureField(
-                    "API Key", text: $keyDraft,
-                    onCommit: saveKey
-                )
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
-                Button("保存") { saveKey() }
-                    .disabled(keyDraft.isEmpty && !keySaved)
-                Text(keySaved ? "已保存 ✓" : "未设置")
-                    .font(.caption)
-                    .foregroundStyle(keySaved ? .green : .secondary)
-            }
-            HStack {
-                Button(testing ? "测试中…" : "测试连接") { testConnection(p) }
-                    .disabled(testing)
-                if let testStatus {
-                    Text(testStatus)
-                        .font(.caption)
-                        .foregroundStyle(
-                            testStatus.hasPrefix("✓") ? .green : .red
+                HStack {
+                    Text("接口格式")
+                    Spacer()
+                    Picker(
+                        "接口格式",
+                        selection: providerBinding(
+                            p.id, \.format, fallback: .openAIChat
                         )
-                        .lineLimit(2)
+                    ) {
+                        ForEach(APIFormat.allCases, id: \.self) { f in
+                            Text(f.label).tag(f)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 280)
+                    // OpenCode Go derives the format from the chosen model
+                    .disabled(p.preset == .opencodeGo && !customModel)
+                }
+                HStack {
+                    Text("Base URL")
+                    Spacer()
+                    TextField("https://…", text: providerBinding(p.id, \.baseURL))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 280)
+                }
+                if p.preset == .opencodeGo {
+                    modelPicker(p)
+                } else {
+                    HStack {
+                        Text("模型")
+                        Spacer()
+                        TextField("模型 id", text: providerBinding(p.id, \.model))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 280)
+                    }
+                }
+                HStack {
+                    Text("API Key")
+                    Spacer()
+                    SecureField(
+                        "API Key", text: $keyDraft,
+                        onCommit: saveKey
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
+                    Button("保存") { saveKey() }
+                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .disabled(keyDraft.isEmpty && !keySaved)
+                    Text(keySaved ? "已保存 ✓" : "未设置")
+                        .font(DeAIDesign.font(10))
+                        .foregroundStyle(keySaved ? .green : DeAIDesign.muted)
+                }
+                HStack {
+                    Button(testing ? "测试中…" : "测试连接") { testConnection(p) }
+                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .disabled(testing)
+                    if let testStatus {
+                        Text(testStatus)
+                            .font(DeAIDesign.font(10))
+                            .foregroundStyle(
+                                testStatus.hasPrefix("✓") ? .green : .red
+                            )
+                            .lineLimit(2)
+                    }
                 }
             }
         }
@@ -643,7 +746,9 @@ private final class UnderlinePreviewNSView: NSView {
                     start: 0, end: 0, suggestions: [], tier: tier
                 )
                 for sub in UnderlineDrawing.layers(
-                    for: finding, rect: rect, appearance: underlineAppearance
+                    for: finding, rect: rect,
+                    appearance: underlineAppearance,
+                    colorAppearance: effectiveAppearance
                 ) {
                     layer.addSublayer(sub)
                 }

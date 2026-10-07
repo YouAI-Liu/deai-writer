@@ -749,15 +749,17 @@ final class AppSettingsTests: XCTestCase {
 // MARK: - UnderlineAppearance
 
 final class UnderlineAppearanceTests: XCTestCase {
-    /// The default appearance must reproduce the pre-settings colors/shapes.
+    /// The default appearance follows the theme-aware palette
+    /// (colorHex "") while keeping the historical shapes.
     func testDefaultMatchesOldLook() {
         let d = UnderlineAppearance.default
-        XCTAssertEqual(d.style(for: .grammar).colorHex, "#E5484D")
+        XCTAssertEqual(d.style(for: .grammar).colorHex, "")
         XCTAssertEqual(d.style(for: .grammar).shape, .wavy)
-        XCTAssertEqual(d.style(for: .aiToneZh).colorHex, "#8E4EC6")
+        XCTAssertEqual(d.style(for: .aiToneZh).colorHex, "")
         XCTAssertEqual(d.style(for: .aiToneZh).shape, .straight)
-        XCTAssertEqual(d.style(for: .aiToneEn).colorHex, "#0090FF")
-        XCTAssertEqual(d.style(for: .markdown).colorHex, "#8B8D98")
+        XCTAssertEqual(d.style(for: .aiToneEn).colorHex, "")
+        XCTAssertEqual(d.style(for: .markdown).colorHex, "")
+        XCTAssertEqual(d.style(for: .markdown).shape, .straight)
         XCTAssertEqual(d.thickness, 1.2)
         XCTAssertEqual(d.opacity, 1)
         XCTAssertEqual(d.offset, 1)
@@ -784,7 +786,7 @@ final class UnderlineAppearanceTests: XCTestCase {
         var a = UnderlineAppearance.default
         a.styles = ["grammar": UnderlineStyle(colorHex: "#000000", shape: .dotted)]
         XCTAssertEqual(a.style(for: .grammar).colorHex, "#000000")
-        XCTAssertEqual(a.style(for: .markdown).colorHex, "#8B8D98")
+        XCTAssertEqual(a.style(for: .markdown).colorHex, "")
     }
 
     func testHexRoundTrip() {
@@ -816,7 +818,7 @@ final class SettingsScreenshotTests: XCTestCase {
             let settings = AppSettings(
                 userDefaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!
             )
-            for (tab, name) in [(0, "checks"), (1, "underline"), (2, "apps")] {
+            for (tab, name) in [(0, "checks"), (1, "appearance"), (2, "ai")] {
                 let hosting = NSHostingView(
                     rootView: SettingsView(settings: settings, initialTab: tab)
                 )
@@ -1196,5 +1198,133 @@ final class MemoryHarnessTests: XCTestCase {
             "2,000 check cycles grew footprint by \(String(format: "%.1f", mib)) MiB"
         )
         print("MEM: 2,000 cycles, footprint growth \(String(format: "%.1f", mib)) MiB")
+    }
+}
+
+final class SuggestionCardModelTests: XCTestCase {
+    private func model() -> SuggestionCardModel {
+        SuggestionCardModel(
+            finding: Finding(category: .markdown, ruleId: "md.bold", message: "移除粗体标记",
+                             start: 0, end: 8, suggestions: ["粗体"], tier: 1),
+            matchedText: "**粗体**"
+        )
+    }
+
+    func testRepeatedApplyCallsReplacementOnlyOnce() {
+        let model = model()
+        var calls = 0
+        model.onApply = { _, _ in calls += 1 }
+        model.apply("粗体")
+        model.apply("粗体")
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(model.phase, .loading)
+    }
+
+    func testFailedReplacementDoesNotShowSuccess() {
+        let model = model()
+        model.onApply = { _, completion in completion(false) }
+        model.apply("粗体")
+        let checked = expectation(description: "verified failure")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            XCTAssertEqual(model.phase, .failure)
+            checked.fulfill()
+        }
+        wait(for: [checked], timeout: 1)
+    }
+
+    func testPreviousCompletionCannotChangeNewFinding() {
+        let model = model()
+        var finish: ((Bool) -> Void)?
+        model.onApply = { _, completion in finish = completion }
+        model.apply("粗体")
+        model.update(finding: model.finding, matchedText: "新的文字")
+        finish?(true)
+        let checked = expectation(description: "old result ignored")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            XCTAssertEqual(model.phase, .idle)
+            XCTAssertEqual(model.matchedText, "新的文字")
+            checked.fulfill()
+        }
+        wait(for: [checked], timeout: 1)
+    }
+}
+
+final class SuggestionCardPanelTests: XCTestCase {
+    func testSwitchingFindingReusesPanelAndFitsLongContent() {
+        let card = SuggestionCardPanel()
+        defer { card.dismiss() }
+        func show(_ text: String) {
+            card.show(
+                finding: Finding(category: .markdown, ruleId: "md.bold", message: "Markdown 残留：加粗",
+                                 start: 0, end: UInt32(text.utf16.count), suggestions: [text], tier: 1),
+                matchedText: text, near: CGRect(x: 300, y: 600, width: 40, height: 20),
+                onApply: { _, completion in completion(true) }, onRewrite: {},
+                onIgnore: {}, onDisableRule: {}, onDismiss: {}
+            )
+        }
+        show("粗体")
+        let first = NSApp.windows.first { $0.contentView is NSHostingView<SuggestionCardView> }
+        XCTAssertNotNil(first)
+        let shortHeight = first?.frame.height ?? 0
+        show(String(repeating: "长文本，", count: 400))
+        let second = NSApp.windows.first { $0.contentView is NSHostingView<SuggestionCardView> }
+        XCTAssertTrue(first === second)
+        XCTAssertGreaterThan(second?.frame.height ?? 0, shortHeight)
+        XCTAssertLessThan(second?.frame.height ?? 1000, 600)
+        XCTAssertEqual(card.current?.matchedText.count, 1600)
+    }
+}
+
+final class UnderlineAppearanceAwareTests: XCTestCase {
+    private func luminance(_ color: NSColor) -> Double {
+        let color = color.usingColorSpace(.sRGB)!
+        func linear(_ value: CGFloat) -> Double {
+            let value = Double(value)
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(color.redComponent) + 0.7152 * linear(color.greenComponent)
+            + 0.0722 * linear(color.blueComponent)
+    }
+
+    func testEveryCategoryMeetsContrastInBothAppearances() {
+        let backgrounds: [(NSAppearance.Name, [NSColor])] = [
+            (.aqua, [.white, NSColor(srgbRed: 236 / 255, green: 235 / 255, blue: 232 / 255, alpha: 1)]),
+            (.darkAqua, [NSColor(srgbRed: 30 / 255, green: 30 / 255, blue: 30 / 255, alpha: 1),
+                         NSColor(srgbRed: 43 / 255, green: 43 / 255, blue: 43 / 255, alpha: 1)])
+        ]
+        for (name, backgrounds) in backgrounds {
+            for category in [Category.grammar, .aiToneZh, .aiToneEn, .markdown] {
+                let foreground = luminance(DeAIDesign.underlineColor(for: category, appearance: NSAppearance(named: name)!))
+                for background in backgrounds {
+                    let background = luminance(background)
+                    let contrast = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+                    XCTAssertGreaterThanOrEqual(contrast, 3, "\(name): \(category)")
+                }
+            }
+        }
+    }
+
+    func testAppearanceChangeRecolorsVisibleLayerWithoutChangingGeometry() {
+        let original = NSApp.appearance
+        defer { NSApp.appearance = original }
+        NSApp.appearance = NSAppearance(named: .aqua)
+        let view = UnderlineView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        view.render([PositionedFinding(
+            finding: Finding(category: .aiToneEn, ruleId: "test", message: "", start: 0, end: 1,
+                             suggestions: [], tier: 1),
+            rects: [CGRect(x: 10, y: 20, width: 100, height: 12)]
+        )])
+        let layer = view.layer!.sublayers!.first as! CAShapeLayer
+        let path = layer.path
+        let hits = view.hitRects().map(\.0)
+        XCTAssertEqual(layer.strokeColor, DeAIDesign.underlineColor(for: .aiToneEn, appearance: NSAppearance(named: .aqua)).cgColor)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        // appearance change rebuilds the layers — geometry is untouched,
+        // the theme-aware stroke color is re-resolved
+        let newLayer = view.layer!.sublayers!.first as! CAShapeLayer
+        XCTAssertEqual(newLayer.strokeColor, DeAIDesign.underlineColor(for: .aiToneEn, appearance: NSAppearance(named: .darkAqua)).cgColor)
+        XCTAssertEqual(newLayer.path, path)
+        XCTAssertEqual(view.hitRects().map(\.0), hits)
+        XCTAssertEqual(newLayer.lineWidth, 1.2)
     }
 }

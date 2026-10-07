@@ -16,13 +16,20 @@ enum UnderlineDrawing {
     static func layers(
         for finding: Finding,
         rect: CGRect,
-        appearance: UnderlineAppearance
+        appearance: UnderlineAppearance,
+        colorAppearance: NSAppearance? = nil
     ) -> [CALayer] {
         let a = appearance.normalized
         let style = a.style(for: finding.category)
-        let baseColor = NSColor(hex: style.colorHex)
-            ?? NSColor(hex: UnderlineAppearance.default.styles[
-                UnderlineAppearance.key(for: finding.category)]!.colorHex)!
+        // "" means 跟随主题: fall back to the appearance-aware palette.
+        let baseColor = style.colorHex.isEmpty
+            ? DeAIDesign.underlineColor(
+                for: finding.category, appearance: colorAppearance
+            )
+            : (NSColor(hex: style.colorHex)
+                ?? DeAIDesign.underlineColor(
+                    for: finding.category, appearance: colorAppearance
+                ))
         let thickness = CGFloat(a.thickness)
 
         // tier 3 = low confidence: drawn dashed when `dimLowConfidence`
@@ -93,11 +100,9 @@ enum UnderlineDrawing {
 /// Coordinates are Cocoa (bottom-left origin) screen coordinates; the view is
 /// placed in a per-screen panel whose frame equals the screen frame.
 final class UnderlineView: NSView {
-    /// Category colors per spec (kept for hit-testing/card tint callers that
-    /// still want the canonical category color).
-    static func color(for category: Category) -> CGColor {
-        let style = UnderlineAppearance.default.style(for: category)
-        return (NSColor(hex: style.colorHex) ?? .black).cgColor
+    /// Theme-aware category color (used for hit-testing/card tint callers).
+    static func color(for category: Category, appearance: NSAppearance? = nil) -> CGColor {
+        DeAIDesign.underlineColor(for: category, appearance: appearance).cgColor
     }
 
     /// Screen-space panel origin (the panel's frame origin in Cocoa coords).
@@ -110,11 +115,30 @@ final class UnderlineView: NSView {
     }
 
     private var positioned: [PositionedFinding] = []
+    private var appearanceObservation: NSKeyValueObservation?
+    #if DEBUG
+    var previewAppearance: NSAppearance? { didSet { refreshColors() } }
+    #endif
+
+    private var colorAppearance: NSAppearance? {
+        #if DEBUG
+        return previewAppearance
+        #else
+        return nil
+        #endif
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = .clear
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            if Thread.isMainThread {
+                self?.refreshColors()
+            } else {
+                DispatchQueue.main.async { [weak self] in self?.refreshColors() }
+            }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -141,6 +165,12 @@ final class UnderlineView: NSView {
         return out
     }
 
+    private func refreshColors() {
+        // Theme colors are baked into the layers — rebuild so appearance
+        // changes re-resolve 跟随主题 styles.
+        rebuildLayers()
+    }
+
     private func rebuildLayers() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -149,7 +179,9 @@ final class UnderlineView: NSView {
             for screenRect in item.rects {
                 let local = screenRect.offsetBy(dx: -panelOrigin.x, dy: -panelOrigin.y)
                 for sub in UnderlineDrawing.layers(
-                    for: item.finding, rect: local, appearance: underlineAppearance
+                    for: item.finding, rect: local,
+                    appearance: underlineAppearance,
+                    colorAppearance: colorAppearance
                 ) {
                     layer?.addSublayer(sub)
                 }

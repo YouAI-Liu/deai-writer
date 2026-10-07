@@ -66,13 +66,15 @@ public struct UnderlineAppearance: Codable, Equatable {
         self.highlightFill = highlightFill
     }
 
-    /// Today's look: grammar red wavy, zh purple, en blue, markdown gray.
+    /// Default: all categories follow the theme-aware palette
+    /// (`colorHex == ""` resolves to `DeAIDesign.underlineColor`); grammar
+    /// stays wavy, the rest straight.
     public static let `default` = UnderlineAppearance(
         styles: [
-            "grammar": UnderlineStyle(colorHex: "#E5484D", shape: .wavy),
-            "aiToneZh": UnderlineStyle(colorHex: "#8E4EC6", shape: .straight),
-            "aiToneEn": UnderlineStyle(colorHex: "#0090FF", shape: .straight),
-            "markdown": UnderlineStyle(colorHex: "#8B8D98", shape: .straight),
+            "grammar": UnderlineStyle(colorHex: "", shape: .wavy),
+            "aiToneZh": UnderlineStyle(colorHex: "", shape: .straight),
+            "aiToneEn": UnderlineStyle(colorHex: "", shape: .straight),
+            "markdown": UnderlineStyle(colorHex: "", shape: .straight),
         ]
     )
 

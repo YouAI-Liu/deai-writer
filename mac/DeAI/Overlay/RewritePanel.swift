@@ -144,40 +144,36 @@ private struct RewritePanelView: View {
     @ObservedObject var model: RewritePanelModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("AI 改写").font(.headline)
+                Text("AI 改写")
+                    .font(DeAIDesign.font(16, weight: .semibold))
                 Spacer()
+                Button { model.onCancel() } label: {
+                    Image(systemName: "xmark")
+                        .font(DeAIDesign.font(11, weight: .medium))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.5))
+                .accessibilityLabel("关闭")
             }
             switch model.phase {
             case .loading:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("AI 改写中…").foregroundStyle(.secondary)
+                    Text("AI 改写中…").foregroundStyle(.white.opacity(0.55))
                     Spacer()
                     Button("取消") { model.onCancel() }
                 }
             case .result:
-                Text("原文")
-                    .font(.caption).foregroundStyle(.secondary)
-                ScrollView {
-                    Text(model.original)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 160)
-                Text("改写")
-                    .font(.caption)
-                ScrollView {
-                    Text(model.result)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 160)
-                HStack {
+                labeled("原文", text: model.original, muted: true)
+                Rectangle().fill(.white.opacity(0.10)).frame(height: 0.5)
+                labeled("改写", text: model.result, muted: false)
+                HStack(spacing: 16) {
                     Button("替换") { model.onAccept() }
                         .keyboardShortcut(.defaultAction)
+                        .buttonStyle(DeAIButtonStyle(inverted: true))
                     Button("复制") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(
@@ -185,40 +181,69 @@ private struct RewritePanelView: View {
                         )
                     }
                     Button("重试") { model.onRetry() }
-                    Spacer()
+                    Spacer(minLength: 0)
                     Button("取消") { model.onCancel() }
                 }
-                .controlSize(.small)
+                .font(DeAIDesign.font(11))
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.6))
             case .error:
                 Text(model.errorMessage)
-                    .font(.callout)
-                    .foregroundStyle(.red)
+                    .font(DeAIDesign.font(12))
+                    .foregroundStyle(.red.opacity(0.9))
                     .fixedSize(horizontal: false, vertical: true)
-                HStack {
+                HStack(spacing: 16) {
                     if model.showOpenSettings {
                         Button("打开设置") { model.onOpenSettings() }
+                            .buttonStyle(DeAIButtonStyle(inverted: true))
                     }
                     if model.canRetry {
                         Button("重试") { model.onRetry() }
                     }
-                    Spacer()
+                    Spacer(minLength: 0)
                     Button("取消") { model.onCancel() }
                 }
-                .controlSize(.small)
+                .font(DeAIDesign.font(11))
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.6))
             case .noChange:
                 Text("没有需要修改的地方")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(DeAIDesign.font(12))
+                    .foregroundStyle(.white.opacity(0.55))
                 HStack {
                     Spacer()
                     Button("关闭") { model.onCancel() }
+                        .buttonStyle(DeAIButtonStyle(compact: true))
                 }
-                .controlSize(.small)
             }
         }
-        .padding(12)
+        .padding(22)
         .frame(width: 420)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(DeAIDesign.ink, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
+        .clipShape(RoundedRectangle(cornerRadius: DeAIDesign.radius))
+        .overlay {
+            RoundedRectangle(cornerRadius: DeAIDesign.radius)
+                .strokeBorder(DeAIDesign.componentOutline, lineWidth: 0.5)
+        }
+        .foregroundStyle(DeAIDesign.paper)
+        .font(DeAIDesign.font())
+        .colorScheme(.dark)
         .onExitCommand { model.onCancel() }
+    }
+
+    private func labeled(_ label: String, text: String, muted: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(DeAIDesign.font(10))
+                .foregroundStyle(.white.opacity(0.4))
+            ScrollView {
+                Text(text)
+                    .font(DeAIDesign.font(13))
+                    .foregroundStyle(muted ? .white.opacity(0.55) : DeAIDesign.paper)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 160)
+        }
     }
 }
