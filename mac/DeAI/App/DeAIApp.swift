@@ -5,6 +5,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = AppController()
 
     func applicationDidFinishLaunching(_: Notification) {
+        // As the XCTest host the ad-hoc-signed Debug app gets a new signature
+        // every build, so TCC never matches and AX would prompt on each run.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
+        else { return }
         controller.start()
     }
 
@@ -21,12 +25,6 @@ struct DeAIApp: App {
     var body: some Scene {
         MenuBarExtra("DeAI", systemImage: "text.badge.checkmark") {
             MenuContent(controller: appDelegate.controller)
-        }
-        Window("设置", id: "settings") {
-            SettingsView(
-                settings: appDelegate.controller.settings,
-                currentBundleId: appDelegate.controller.frontmostBundleId
-            )
         }
         Window("调试：规则测试窗口", id: "debug") {
             ContentView()
@@ -56,7 +54,7 @@ private struct MenuContent: View {
             }
         }
         Divider()
-        Button("设置…") { openWindow(id: "settings") }
+        Button("设置…") { controller.showSettingsWindow() }
         Button("调试：规则测试窗口") { openWindow(id: "debug") }
         Divider()
         Button("退出") { NSApp.terminate(nil) }

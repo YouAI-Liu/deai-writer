@@ -248,34 +248,50 @@ enum TextReplacer {
 
     /// AX path first, pasteboard/delete fallback; the completion runs on the
     /// main queue once the write is verified (or has definitively failed).
+    /// `start`/`end` are element-local UTF-16 offsets; `label` is only for
+    /// logs (rule id, or "ai-rewrite").
     static func apply(
-        element: AXElement, finding: Finding, replacement: String,
-        matched: String, baseOffset: Int = 0, log: Logger,
+        element: AXElement, start: Int, end: Int,
+        matched: String, replacement: String,
+        baseOffset: Int = 0, label: String, log: Logger,
         completion: @escaping (Result) -> Void
     ) {
-        let start = Int(finding.start)
-        let end = Int(finding.end)
         switch applyViaAX(
             element: element, start: start, end: end,
             matched: matched, replacement: replacement, baseOffset: baseOffset
         ) {
         case .some(.success):
-            log.info("replaced via AXSelectedText: \(finding.ruleId)")
+            log.info("replaced via AXSelectedText: \(label)")
             completion(Result(path: .axSelectedText, success: true))
         case .none:
-            log.notice("replacement aborted (text changed): \(finding.ruleId)")
+            log.notice("replacement aborted (text changed): \(label)")
             completion(Result(path: .aborted, success: false))
         case .some(.failNoPaste):
-            log.warning("AX write inconclusive, not pasting: \(finding.ruleId)")
+            log.warning("AX write inconclusive, not pasting: \(label)")
             completion(Result(path: .axSelectedText, success: false))
         case .some(.fallbackToPasteboard):
             applyViaPasteboard(
                 element: element, start: start, end: end,
                 replacement: replacement, baseOffset: baseOffset
             ) { ok in
-                log.info("replaced via \(replacement.isEmpty ? "delete-key" : "pasteboard") (\(ok ? "verified" : "unverified")): \(finding.ruleId)")
+                log.info("replaced via \(replacement.isEmpty ? "delete-key" : "pasteboard") (\(ok ? "verified" : "unverified")): \(label)")
                 completion(Result(path: .pasteboard, success: ok))
             }
         }
+    }
+
+    /// Finding-based convenience wrapper.
+    static func apply(
+        element: AXElement, finding: Finding, replacement: String,
+        matched: String, baseOffset: Int = 0, log: Logger,
+        completion: @escaping (Result) -> Void
+    ) {
+        apply(
+            element: element,
+            start: Int(finding.start), end: Int(finding.end),
+            matched: matched, replacement: replacement,
+            baseOffset: baseOffset, label: finding.ruleId, log: log,
+            completion: completion
+        )
     }
 }

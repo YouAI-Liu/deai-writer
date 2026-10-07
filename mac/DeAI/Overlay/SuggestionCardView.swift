@@ -5,6 +5,7 @@ struct SuggestionCardView: View {
     let finding: Finding
     let matchedText: String
     var onApply: (String) -> Void
+    var onRewrite: () -> Void
     var onIgnore: () -> Void
     var onDisableRule: () -> Void
     var onDismiss: () -> Void
@@ -70,9 +71,8 @@ struct SuggestionCardView: View {
             }
             Divider()
             HStack {
-                Button("AI 改写") {}
-                    .disabled(true)
-                    .help("即将支持")
+                Button("AI 改写") { onRewrite() }
+                    .help("让 AI 改写这一段")
                 Spacer()
                 Button("忽略") { onIgnore() }
                 Button("停用此规则") { onDisableRule() }

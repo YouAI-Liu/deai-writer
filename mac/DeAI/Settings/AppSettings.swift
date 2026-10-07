@@ -47,6 +47,23 @@ public final class AppSettings: ObservableObject {
         didSet { save() }
     }
 
+    /// AI-rewrite providers; the selected one is `activeProviderId`.
+    /// (internal: ProviderConfig/SecretStore are app-internal types)
+    @Published var providers: [ProviderConfig] {
+        didSet { save() }
+    }
+    @Published var activeProviderId: UUID? {
+        didSet { save() }
+    }
+    /// Global hotkey that triggers a rewrite of the current scope.
+    @Published var rewriteHotkey: RewriteHotkey {
+        didSet { save() }
+    }
+
+    /// API keys live in the keychain, keyed by provider UUID — never in
+    /// UserDefaults, never logged.
+    let secrets: SecretStore
+
     /// Session-scoped ignores: `(ruleId, matchedText)` pairs — cleared on
     /// relaunch, intentionally not persisted.
     @Published public var sessionIgnored: Set<IgnoreKey> = []
@@ -88,7 +105,10 @@ public final class AppSettings: ObservableObject {
         "com.t3tools.t3code",
     ]
 
-    public init(userDefaults: UserDefaults = .standard) {
+    init(
+        userDefaults: UserDefaults = .standard,
+        secrets: SecretStore = KeychainSecretStore()
+    ) {
         var stored: Stored?
         if let data = userDefaults.data(forKey: Self.defaultsKey) {
             stored = try? JSONDecoder().decode(Stored.self, from: data)
@@ -101,7 +121,16 @@ public final class AppSettings: ObservableObject {
         self.sensitivity = stored?.sensitivity ?? 2
         self.disabledRuleIds = stored?.disabledRuleIds ?? []
         self.appRules = stored?.appRules ?? [:]
+        // New in the rewrite feature: optional in `Stored` so pre-upgrade
+        // JSON keeps decoding (migration). First launch gets the OpenCode Go
+        // preset as the active provider.
+        let providers = stored?.providers ?? [ProviderConfig(preset: .opencodeGo)]
+        self.providers = providers
+        self.activeProviderId = stored?.activeProviderId
+            ?? providers.first?.id
+        self.rewriteHotkey = stored?.rewriteHotkey ?? .ctrlOptR
         self.userDefaults = userDefaults
+        self.secrets = secrets
     }
 
     private let userDefaults: UserDefaults
@@ -115,6 +144,10 @@ public final class AppSettings: ObservableObject {
         var sensitivity: Int
         var disabledRuleIds: Set<String>
         var appRules: [String: AppRule]
+        // optional → old payloads (which lack these keys) still decode
+        var providers: [ProviderConfig]?
+        var activeProviderId: UUID?
+        var rewriteHotkey: RewriteHotkey?
     }
 
     private func save() {
@@ -126,7 +159,10 @@ public final class AppSettings: ObservableObject {
             markdown: markdown,
             sensitivity: sensitivity,
             disabledRuleIds: disabledRuleIds,
-            appRules: appRules
+            appRules: appRules,
+            providers: providers,
+            activeProviderId: activeProviderId,
+            rewriteHotkey: rewriteHotkey
         )
         if let data = try? JSONEncoder().encode(stored) {
             userDefaults.set(data, forKey: Self.defaultsKey)
@@ -172,5 +208,36 @@ public final class AppSettings: ObservableObject {
             markdown: markdown && markdownEnabled(for: bundleId),
             sensitivity: UInt8(clamping: sensitivity)
         )
+    }
+
+    // MARK: - AI providers
+
+    /// The provider rewrite requests go to. Falls back to the first entry
+    /// when `activeProviderId` points at a deleted row.
+    var activeProvider: ProviderConfig? {
+        providers.first(where: { $0.id == activeProviderId })
+            ?? providers.first
+    }
+
+    @discardableResult
+    func addProvider(preset: ProviderPreset) -> ProviderConfig {
+        let p = ProviderConfig(preset: preset)
+        providers.append(p)
+        activeProviderId = p.id
+        return p
+    }
+
+    func deleteProvider(id: UUID) {
+        providers.removeAll { $0.id == id }
+        secrets.set(nil, for: id.uuidString)
+        if activeProviderId == id {
+            activeProviderId = providers.first?.id
+        }
+    }
+
+    func updateProvider(_ provider: ProviderConfig) {
+        guard let i = providers.firstIndex(where: { $0.id == provider.id })
+        else { return }
+        providers[i] = provider
     }
 }

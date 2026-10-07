@@ -22,6 +22,27 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private let overlay = OverlayWindow()
     private let card = SuggestionCardPanel()
     private let clickMonitor = ClickMonitor()
+    private let rewritePanel = RewritePanel()
+    private let llmClient = LLMClient()
+    private let hotkey = GlobalHotkey()
+
+    /// What the rewrite panel is operating on. Holds the element itself —
+    /// Word page keys (CFHash) change on scroll, so never re-derive it.
+    private struct RewriteContext {
+        let element: AXElement
+        let baseOffset: Int
+        /// element-local UTF-16 scope
+        let start: Int
+        let end: Int
+        let original: String
+        let hints: [RewriteHint]
+        /// app the panel was opened in — closed on frontmost-app change
+        let bundleId: String
+    }
+
+    private var rewriteContext: RewriteContext?
+    private var rewriteTask: Task<Void, Never>?
+    private var settingsWindow: NSWindow?
 
     private struct TargetState {
         var target: TextTarget
@@ -48,6 +69,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private var settingsCancellable: AnyCancellable?
 
     private var lastReplacement: (path: String, success: Bool)?
+    /// Rewrite panel state for the debug JSON (nil when no panel is up).
+    private var rewriteDebug:
+        (state: String, original: String, result: String, error: String)?
     private var debugObserver: NSObjectProtocol?
 
     /// The finding an open suggestion card is bound to — a check only
@@ -74,6 +98,19 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         clickMonitor.onOtherClick = { [weak self] in
             self?.card.dismiss()
         }
+        rewritePanel.model.onAccept = { [weak self] in self?.rewriteAccept() }
+        rewritePanel.model.onRetry = { [weak self] in self?.runRewriteRequest() }
+        rewritePanel.model.onCancel = { [weak self] in
+            self?.rewritePanel.dismiss()
+        }
+        rewritePanel.model.onOpenSettings = { [weak self] in
+            self?.showSettingsWindow()
+        }
+        rewritePanel.onDismissed = { [weak self] in
+            self?.rewriteClosed()
+        }
+        hotkey.onPress = { [weak self] in self?.rewriteHotkeyPressed() }
+        applyHotkeySetting()
         settingsCancellable = settings.objectWillChange.sink { [weak self] _ in
             // objectWillChange fires before the write lands — apply next tick
             DispatchQueue.main.async { [weak self] in self?.settingsChanged() }
@@ -104,6 +141,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         clickMonitor.stop()
         overlay.hideAll()
         card.dismiss()
+        rewritePanel.dismiss()
+        hotkey.unregister()
+        settingsWindow?.close()
         permissionTimer?.invalidate()
         permissionWindow?.close()
         if let o = debugObserver {
@@ -155,6 +195,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
 
     func focusTargetsChanged(_ newTargets: [TextTarget]) {
         frontmostBundleId = tracker.currentApp?.bundleIdentifier
+        // switching to another app closes the rewrite panel
+        if let ctx = rewriteContext,
+           ctx.bundleId != frontmostBundleId {
+            rewritePanel.dismiss()
+        }
         let keys = Set(newTargets.map { tag(for: $0.element) })
         for key in states.keys where !keys.contains(key) {
             states.removeValue(forKey: key)
@@ -267,6 +312,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         cardContext = nil
         overlay.hideAll()
         card.dismiss()
+        rewritePanel.dismiss()
         clickMonitor.setHitRects([])
         writeDebugState()
     }
@@ -432,6 +478,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     matched: matched, replacement: replacement
                 )
             },
+            onRewrite: { [weak self] in
+                self?.startRewriteForFinding(
+                    key: key, finding: finding, anchor: rect
+                )
+            },
             onIgnore: { [weak self] in
                 self?.ignoreFinding(key: key, finding: finding, matched: matched)
             },
@@ -482,6 +533,324 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         scheduleCheck(key, now: true)
     }
 
+    // MARK: - AI rewrite
+
+    private func applyHotkeySetting() {
+        hotkey.set(settings.rewriteHotkey.spec)
+    }
+
+    /// Card button path: rewrite the paragraph containing the finding.
+    private func startRewriteForFinding(
+        key: UInt64, finding: Finding, anchor: CGRect
+    ) {
+        guard let state = states[key] else { return }
+        card.dismiss()
+        // collapsed selection at the finding start → enclosing paragraph
+        let caret = CFRange(
+            location: state.target.baseOffset + Int(finding.start),
+            length: 0
+        )
+        guard let scope = RewriteScope.compute(
+            text: state.text,
+            selection: caret,
+            baseOffset: state.target.baseOffset
+        ) else {
+            NSSound.beep()
+            return
+        }
+        beginRewrite(
+            element: state.target.element,
+            baseOffset: state.target.baseOffset,
+            text: state.text, scope: scope,
+            findings: state.findings,
+            anchor: anchor
+        )
+    }
+
+    /// Global hotkey path: rewrite the selection, or the caret's paragraph
+    /// when the selection is collapsed.
+    private func rewriteHotkeyPressed() {
+        for (_, state) in states {
+            guard let sel = state.target.element.selectedTextRange
+            else { continue }
+            let base = state.target.baseOffset
+            let len = state.text.utf16.count
+            // the selection must live inside this element's shared-text slice
+            guard sel.location >= base, sel.location <= base + len
+            else { continue }
+            guard let scope = RewriteScope.compute(
+                text: state.text,
+                selection: sel,
+                baseOffset: base
+            ) else {
+                NSSound.beep()
+                return
+            }
+            // anchor on the scope's first glyph rect (AX space → Cocoa);
+            // fallback: near the mouse
+            let anchor: CGRect
+            let firstGlyph = CFRange(
+                location: base + scope.start,
+                length: min(1, scope.end - scope.start)
+            )
+            if let axRect = state.target.element.boundsForRange(firstGlyph) {
+                anchor = TextGeometry.axToCocoa(
+                    axRect, primaryMaxY: primaryMaxY
+                )
+            } else {
+                anchor = CGRect(
+                    origin: NSEvent.mouseLocation,
+                    size: CGSize(width: 1, height: 1)
+                )
+            }
+            beginRewrite(
+                element: state.target.element,
+                baseOffset: base,
+                text: state.text, scope: scope,
+                findings: state.findings,
+                anchor: anchor
+            )
+            return
+        }
+        NSSound.beep()
+    }
+
+    /// Shared entry: validates config, captures the context, shows the
+    /// panel in loading state, and kicks off the request.
+    private func beginRewrite(
+        element: AXElement,
+        baseOffset: Int,
+        text: String,
+        scope: (start: Int, end: Int),
+        findings: [Finding],
+        anchor: CGRect
+    ) {
+        // Close any open panel first: show() dismisses the previous panel,
+        // whose onDismissed would clear the context we set below (RW-01).
+        rewritePanel.dismiss()
+        guard scope.end - scope.start <= RewriteScope.maxLength else {
+            showRewriteError(
+                "选中内容过长（上限 4000 字）",
+                original: "", anchor: anchor
+            )
+            return
+        }
+        let units = Array(text.utf16)
+        let original = String(
+            decoding: units[scope.start..<scope.end], as: UTF16.self
+        )
+        guard let provider = settings.activeProvider,
+              !provider.baseURL
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !provider.model.isEmpty,
+              !provider.preset.requiresKey
+                || !(settings.secrets.get(provider.id.uuidString) ?? "")
+                    .isEmpty
+        else {
+            showRewriteError(
+                "请先在设置中配置 AI 服务",
+                original: original, anchor: anchor,
+                showOpenSettings: true
+            )
+            return
+        }
+        let hints: [RewriteHint] = findings
+            .filter {
+                Int($0.start) >= scope.start && Int($0.end) <= scope.end
+            }
+            .prefix(20)
+            .map {
+                let s = Int($0.start)
+                let e = min(Int($0.end), units.count)
+                return RewriteHint(
+                    ruleId: $0.ruleId,
+                    matched: e > s
+                        ? String(decoding: units[s..<e], as: UTF16.self) : "",
+                    message: $0.message
+                )
+            }
+        rewriteContext = RewriteContext(
+            element: element,
+            baseOffset: baseOffset,
+            start: scope.start,
+            end: scope.end,
+            original: original,
+            hints: hints,
+            bundleId: tracker.currentApp?.bundleIdentifier ?? ""
+        )
+        rewritePanel.model.phase = .loading
+        rewritePanel.model.original = original
+        rewritePanel.model.result = ""
+        rewritePanel.model.errorMessage = ""
+        rewritePanel.model.showOpenSettings = false
+        rewritePanel.model.canRetry = true
+        rewritePanel.show(near: anchor)
+        rewriteDebug = (state: "loading", original: original,
+                        result: "", error: "")
+        writeDebugState()
+        runRewriteRequest()
+    }
+
+    /// (Re)send the request for the captured context. Also wired to the
+    /// panel's 重试 button.
+    private func runRewriteRequest() {
+        guard let ctx = rewriteContext,
+              let provider = settings.activeProvider else { return }
+        rewriteTask?.cancel()
+        rewritePanel.model.phase = .loading
+        rewritePanel.update()
+        rewriteDebug = (state: "loading", original: ctx.original,
+                        result: "", error: "")
+        writeDebugState()
+        let user = RewritePrompt.user(text: ctx.original, hints: ctx.hints)
+        let apiKey = settings.secrets.get(provider.id.uuidString)
+        rewriteTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let raw = try await self.llmClient.complete(
+                    config: provider,
+                    apiKey: apiKey,
+                    system: RewritePrompt.system,
+                    user: user
+                )
+                let cleaned = LLMClient.cleanOutput(raw)
+                self.rewriteFinished(cleaned)
+            } catch is CancellationError {
+                // dismissed while in flight — panel already closed
+            } catch {
+                self.rewriteFailed(error.localizedDescription)
+            }
+        }
+    }
+
+    private func rewriteFinished(_ result: String) {
+        guard let ctx = rewriteContext, rewritePanel.isShowing else { return }
+        if result == ctx.original {
+            rewritePanel.model.phase = .noChange
+            rewriteDebug = (state: "noChange", original: ctx.original,
+                            result: result, error: "")
+        } else {
+            rewritePanel.model.phase = .result
+            rewritePanel.model.result = result
+            rewriteDebug = (state: "result", original: ctx.original,
+                            result: result, error: "")
+        }
+        rewritePanel.update()
+        writeDebugState()
+    }
+
+    private func rewriteFailed(_ message: String) {
+        guard let ctx = rewriteContext, rewritePanel.isShowing else { return }
+        rewritePanel.model.phase = .error
+        rewritePanel.model.errorMessage = message
+        rewriteDebug = (state: "error", original: ctx.original,
+                        result: "", error: message)
+        rewritePanel.update()
+        writeDebugState()
+    }
+
+    /// Error-only panel (no request context exists yet — e.g. no provider).
+    private func showRewriteError(
+        _ message: String, original: String,
+        anchor: CGRect, showOpenSettings: Bool = false
+    ) {
+        rewriteContext = nil
+        rewritePanel.model.phase = .error
+        rewritePanel.model.original = original
+        rewritePanel.model.result = ""
+        rewritePanel.model.errorMessage = message
+        rewritePanel.model.showOpenSettings = showOpenSettings
+        rewritePanel.model.canRetry = false
+        rewritePanel.show(near: anchor)
+        rewriteDebug = (state: "error", original: original,
+                        result: "", error: message)
+        writeDebugState()
+    }
+
+    /// 替换 button / debug hook: re-read the element, verify the scope text
+    /// is untouched, then write via the normal replacer.
+    private func rewriteAccept() {
+        guard let ctx = rewriteContext,
+              rewritePanel.model.phase == .result else { return }
+        let result = rewritePanel.model.result
+        guard let live = ctx.element.stringValue else {
+            rewriteFailed("无法读取文本")
+            return
+        }
+        let units = Array(live.utf16)
+        guard ctx.end <= units.count,
+              String(decoding: units[ctx.start..<ctx.end], as: UTF16.self)
+                  == ctx.original
+        else {
+            rewriteFailed("原文已改动，请重新改写")
+            return
+        }
+        let normalized = RewriteScope.normalizeNewlines(
+            result, likeOriginal: ctx.original
+        )
+        rewritePanel.dismiss()
+        TextReplacer.apply(
+            element: ctx.element,
+            start: ctx.start, end: ctx.end,
+            matched: ctx.original,
+            replacement: normalized,
+            baseOffset: ctx.baseOffset,
+            label: "ai-rewrite",
+            log: log
+        ) { [weak self] r in
+            self?.lastReplacement = (r.path.rawValue, r.success)
+            self?.writeDebugState()
+        }
+        // re-check the owning target (element may be a Word page whose key
+        // changed on scroll — match by identity, not key)
+        if let key = states.first(where: {
+            CFEqual($0.value.target.element.raw, ctx.element.raw)
+        })?.key {
+            scheduleCheck(key, now: true)
+        }
+    }
+
+    /// Panel closed (Esc / outside click / 取消 / accept path): cancel the
+    /// in-flight request and clear the debug field.
+    private func rewriteClosed() {
+        rewriteTask?.cancel()
+        rewriteTask = nil
+        rewriteContext = nil
+        rewriteDebug = nil
+        writeDebugState()
+    }
+
+    // MARK: - settings window
+
+    /// A real NSWindow (the menu-bar app has no key window otherwise) —
+    /// replaces the SwiftUI `Window` scene, which misbehaved behind
+    /// `LSUIElement`.
+    func showSettingsWindow() {
+        if let w = settingsWindow {
+            NSApp.activate(ignoringOtherApps: true)
+            w.makeKeyAndOrderFront(nil)
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "DeAI 设置"
+        window.contentView = NSHostingView(
+            rootView: SettingsView(
+                settings: settings,
+                currentBundleId: tracker.currentApp?.bundleIdentifier
+            )
+        )
+        window.center()
+        window.isReleasedWhenClosed = false
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        settingsWindow = window
+    }
+
     // MARK: - debug commands (automated QA)
 
     /// All positioned findings matching `ruleId`, deterministically ordered
@@ -512,10 +881,27 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
 
     /// Drive the exact code paths of the card UI buttons remotely.
     private func handleDebugCommand(_ cmd: DebugCommand) {
-        if cmd.action == .dismissCard {
+        switch cmd.action {
+        case .dismissCard:
             card.dismiss()
             writeDebugState()
             return
+        case .rewriteHotkey:
+            rewriteHotkeyPressed()
+            writeDebugState()
+            return
+        case .rewriteAccept:
+            rewriteAccept()
+            writeDebugState()
+            return
+        case .rewriteCancel:
+            rewritePanel.dismiss()
+            writeDebugState()
+            return
+        case .rewriteFinding:
+            break // resolved below, with the finding
+        default:
+            break
         }
         let matches = positionedFindings(ruleId: cmd.ruleId)
         guard matches.indices.contains(cmd.index) else {
@@ -542,7 +928,15 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             ignoreFinding(key: key, finding: pf.finding, matched: matched)
         case .disableRule:
             disableRule(key: key, finding: pf.finding)
-        case .dismissCard:
+        case .rewriteFinding:
+            // same path as the card's AI 改写 button
+            let anchor = pf.rects.first
+                ?? CGRect(
+                    origin: NSEvent.mouseLocation,
+                    size: CGSize(width: 1, height: 1)
+                )
+            startRewriteForFinding(key: key, finding: pf.finding, anchor: anchor)
+        case .dismissCard, .rewriteHotkey, .rewriteAccept, .rewriteCancel:
             break // handled above
         }
         writeDebugState()
@@ -565,6 +959,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     private func settingsChanged() {
+        applyHotkeySetting()
         if !settings.autoUnderline {
             overlay.hideAll()
             clickMonitor.setHitRects([])
@@ -612,6 +1007,12 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             let end: UInt32
             let suggestions: [String]
         }
+        struct Rewrite: Codable {
+            let state: String
+            let original: String
+            let result: String
+            let error: String
+        }
         let timestamp: String
         let frontmostBundleId: String
         let targetCount: Int
@@ -620,6 +1021,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         let timings: Timings
         let lastReplacement: Replacement?
         let card: Card?
+        let rewrite: Rewrite?
     }
 
     private static let isoFormatter: ISO8601DateFormatter = {
@@ -687,6 +1089,14 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     end: $0.finding.end,
                     suggestions: $0.finding.suggestions
                 )
+            },
+            rewrite: rewriteDebug.map {
+                .init(
+                    state: $0.state,
+                    original: $0.original,
+                    result: $0.result,
+                    error: $0.error
+                )
             }
         )
         guard let data = try? JSONEncoder().encode(dbg) else { return }
@@ -706,6 +1116,10 @@ struct DebugCommand {
         case ignore
         case disableRule
         case dismissCard
+        case rewriteFinding
+        case rewriteHotkey
+        case rewriteAccept
+        case rewriteCancel
     }
 
     let action: Action

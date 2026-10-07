@@ -23,6 +23,7 @@ final class SuggestionCardPanel {
         matchedText: String,
         near rect: CGRect,
         onApply: @escaping (String) -> Void,
+        onRewrite: @escaping () -> Void,
         onIgnore: @escaping () -> Void,
         onDisableRule: @escaping () -> Void,
         onDismiss: @escaping () -> Void
@@ -35,6 +36,9 @@ final class SuggestionCardPanel {
             finding: finding,
             matchedText: matchedText,
             onApply: { [weak self] s in onApply(s); self?.dismiss() },
+            // the controller re-derives the scope from the finding — the
+            // card must be gone before the rewrite panel anchors
+            onRewrite: { [weak self] in self?.dismiss(); onRewrite() },
             onIgnore: { [weak self] in onIgnore(); self?.dismiss() },
             onDisableRule: { [weak self] in onDisableRule(); self?.dismiss() },
             onDismiss: { [weak self] in self?.dismiss() }
