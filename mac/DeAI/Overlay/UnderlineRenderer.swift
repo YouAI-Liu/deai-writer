@@ -5,9 +5,8 @@ import QuartzCore
 /// Coordinates are Cocoa (bottom-left origin) screen coordinates; the view is
 /// placed in a per-screen panel whose frame equals the screen frame.
 final class UnderlineView: NSView {
-    /// A single muted terracotta accent remains visible on light and dark hosts.
     static func color(for category: Category) -> CGColor {
-        NSColor(srgbRed: 168 / 255, green: 105 / 255, blue: 68 / 255, alpha: 1).cgColor
+        DeAIDesign.underlineColor(for: category).cgColor
     }
 
     /// Screen-space panel origin (the panel's frame origin in Cocoa coords).

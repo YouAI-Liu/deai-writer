@@ -9,16 +9,8 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .top) {
-                    Text("设置")
-                        .font(DeAIDesign.font(27, weight: .semibold)).tracking(-0.8)
-                    Spacer()
-                    Image(systemName: "text.badge.checkmark")
-                        .font(DeAIDesign.font(22, weight: .medium))
-                        .foregroundStyle(DeAIDesign.paper)
-                        .frame(width: 56, height: 56)
-                        .background(DeAIDesign.ink, in: RoundedRectangle(cornerRadius: 18))
-                }
+                Text("设置")
+                    .font(DeAIDesign.font(27, weight: .semibold)).tracking(-0.8)
                 section("检查类别") {
                     VStack(spacing: 18) {
                         Toggle("语法", isOn: $settings.grammar)

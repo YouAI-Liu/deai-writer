@@ -69,15 +69,6 @@ struct SuggestionCardView: View {
         model.phase == .success || model.phase == .failure
     }
 
-    private var categoryName: String {
-        switch model.finding.category {
-        case .grammar: "语法"
-        case .aiToneZh: "中文 AI 腔"
-        case .aiToneEn: "英文 AI 腔"
-        case .markdown: "Markdown 残留"
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             Group {
@@ -98,7 +89,7 @@ struct SuggestionCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius))
         .overlay {
             RoundedRectangle(cornerRadius: compact ? 36 : DeAIDesign.radius)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
         }
         .foregroundStyle(DeAIDesign.paper)
         .font(DeAIDesign.font())
@@ -124,9 +115,11 @@ struct SuggestionCardView: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                SecondaryLabel(categoryName, light: true)
-                Spacer()
+            HStack(alignment: .top, spacing: 12) {
+                Text(verbatim: model.finding.message)
+                    .font(DeAIDesign.font(16, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Button { model.onDismiss() } label: {
                     Image(systemName: "xmark").font(DeAIDesign.font(11, weight: .medium))
                         .frame(width: 24, height: 24)
@@ -134,24 +127,9 @@ struct SuggestionCardView: View {
                 .buttonStyle(.plain).foregroundStyle(.white.opacity(0.5))
                 .accessibilityLabel("关闭建议")
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(model.finding.message)
-                    .font(DeAIDesign.font(16, weight: .semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(model.finding.ruleId)
-                    .font(DeAIDesign.font(10)).foregroundStyle(.white.opacity(0.42))
-            }
-            Group {
-                if needsScrolling {
-                    ScrollView { comparisons }.frame(height: 220)
-                } else {
-                    comparisons
-                }
-            }
+            comparisons
             Rectangle().fill(.white.opacity(0.10)).frame(height: 0.5)
             HStack(spacing: 16) {
-                Button("AI 改写") {}.disabled(true)
-                    .foregroundStyle(.white.opacity(0.28))
                 Spacer(minLength: 0)
                 Button("忽略") { model.onIgnore() }
                 Button("停用规则") { model.onDisableRule() }
@@ -160,16 +138,6 @@ struct SuggestionCardView: View {
             .foregroundStyle(.white.opacity(0.6))
             .disabled(model.applicationStarted)
         }
-    }
-
-    private var needsScrolling: Bool {
-        let results: [String]
-        if case let .diff(result) = model.phase {
-            results = [result]
-        } else {
-            results = model.finding.suggestions
-        }
-        return results.count > 2 || model.matchedText.count + results.reduce(0) { $0 + $1.count } > 140
     }
 
     private var comparisons: some View {
@@ -195,8 +163,11 @@ struct SuggestionCardView: View {
         HStack(alignment: .top, spacing: 14) {
             Text(label).font(DeAIDesign.font(10)).foregroundStyle(.white.opacity(0.4))
                 .frame(width: 24, alignment: .leading).padding(.top, 2)
-            Text(text).font(DeAIDesign.font(13))
+            Text(verbatim: text)
+                .font(DeAIDesign.font(13, weight: .regular))
                 .foregroundStyle(muted ? .white.opacity(0.55) : DeAIDesign.paper)
+                .lineLimit(3)
+                .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

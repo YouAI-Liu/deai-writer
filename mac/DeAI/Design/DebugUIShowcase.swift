@@ -19,7 +19,7 @@ struct DebugUIShowcase: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 20) {
-                ForEach(["建议", "设置", "权限", "规则窗口"], id: \.self) { title in
+                ForEach(["建议", "设置", "权限", "规则窗口", "下划线"], id: \.self) { title in
                     Button(title) { page = title }.buttonStyle(.plain)
                         .foregroundStyle(page == title ? DeAIDesign.ink : DeAIDesign.muted)
                 }
@@ -32,6 +32,7 @@ struct DebugUIShowcase: View {
                 case "设置": SettingsView(settings: settings, currentBundleId: "com.apple.TextEdit")
                 case "权限": PermissionView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 case "规则窗口": ContentView()
+                case "下划线": DebugUnderlineColors()
                 default: cardStage
                 }
             }
@@ -89,6 +90,55 @@ struct DebugUIShowcase: View {
     private func reset() {
         model.update(finding: Self.sample, matchedText: "说白了，")
         model.visible = true
+    }
+}
+
+private struct DebugUnderlineColors: View {
+    private let samples: [(Category, String)] = [
+        (.grammar, "语法"), (.aiToneZh, "中文 AI 腔"),
+        (.aiToneEn, "英文 AI 腔"), (.markdown, "Markdown")
+    ]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            column(dark: false)
+            column(dark: true)
+        }
+        .frame(width: 620, height: 400)
+    }
+
+    private func column(dark: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text(dark ? "深色背景" : "浅色背景")
+                .font(DeAIDesign.font(16, weight: .medium))
+            ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(sample.1).font(DeAIDesign.font(13))
+                    DebugUnderlineSample(category: sample.0).frame(width: 240, height: 10)
+                }
+            }
+        }
+        .padding(30).frame(width: 310, height: 400, alignment: .topLeading)
+        .foregroundStyle(dark ? DeAIDesign.paper : DeAIDesign.ink)
+        .background(dark ? Color(red: 0.18, green: 0.18, blue: 0.18) : DeAIDesign.canvas)
+    }
+}
+
+private struct DebugUnderlineSample: NSViewRepresentable {
+    let category: Category
+
+    func makeNSView(context: Context) -> UnderlineView {
+        UnderlineView(frame: .zero)
+    }
+
+    func updateNSView(_ view: UnderlineView, context: Context) {
+        view.render([
+            PositionedFinding(
+                finding: Finding(category: category, ruleId: "", message: "", start: 0, end: 1,
+                                 suggestions: [], tier: 1),
+                rects: [CGRect(x: 0, y: 5, width: 240, height: 1)]
+            )
+        ])
     }
 }
 
@@ -203,13 +253,14 @@ final class DebugUICapture {
             try await save("card-reduced-success")
             model.update(
                 finding: Finding(category: .markdown, ruleId: "md.bold", message: "Markdown 残留：加粗",
-                                 start: 0, end: 2004, suggestions: [String(repeating: "长文本，", count: 400)], tier: 1),
+                                 start: 0, end: 1604, suggestions: [String(repeating: "长文本，", count: 400)], tier: 1),
                 matchedText: "**" + String(repeating: "长文本，", count: 400) + "**"
             )
             show(card(), size: NSSize(width: 620, height: 600))
             try await save("card-long-text")
-            scrollToBottom(in: window.contentView)
             try await save("card-long-text-bottom")
+            show(DebugUnderlineColors(), size: NSSize(width: 620, height: 400))
+            try await save("underline-colors")
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
                  size: NSSize(width: 540, height: 700))
             try await save("settings")

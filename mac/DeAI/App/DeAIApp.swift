@@ -78,19 +78,18 @@ struct MenuContent: View {
                              ? "在 \(appName(bundleId)) 中停用" : "在 \(appName(bundleId)) 中启用")
                             .lineLimit(2)
                         Spacer()
-                        Image(systemName: "minus.circle")
                     }
                 }
                 .buttonStyle(.plain)
             }
             Rectangle().fill(.white.opacity(0.12)).frame(height: 0.5)
             VStack(spacing: 16) {
-                menuButton("设置", icon: "slider.horizontal.3") { openWindow(id: "settings") }
-                menuButton("规则测试窗口", icon: "text.alignleft") { openWindow(id: "debug") }
+                menuButton("设置") { openWindow(id: "settings") }
+                menuButton("规则测试窗口") { openWindow(id: "debug") }
                 #if DEBUG
-                menuButton("UI 预览", icon: "rectangle.on.rectangle") { openWindow(id: "ui-preview") }
+                menuButton("UI 预览") { openWindow(id: "ui-preview") }
                 #endif
-                menuButton("退出 DeAI", icon: "arrow.right.to.line") { NSApp.terminate(nil) }
+                menuButton("退出 DeAI") { NSApp.terminate(nil) }
             }
         }
         .font(DeAIDesign.font(12))
@@ -100,12 +99,11 @@ struct MenuContent: View {
         .preferredColorScheme(.dark)
     }
 
-    private func menuButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+    private func menuButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
                 Text(title)
                 Spacer()
-                Image(systemName: icon).font(DeAIDesign.font(13, weight: .medium))
             }
             .contentShape(Rectangle())
         }

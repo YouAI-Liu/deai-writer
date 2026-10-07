@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 private struct ReducedMotionOverride: EnvironmentKey {
@@ -23,9 +24,17 @@ enum DeAIDesign {
     static let ink = Color(red: 17 / 255, green: 17 / 255, blue: 17 / 255)
     static let paper = Color(red: 250 / 255, green: 250 / 255, blue: 248 / 255)
     static let muted = Color(red: 108 / 255, green: 107 / 255, blue: 103 / 255)
-    static let accent = Color(red: 168 / 255, green: 105 / 255, blue: 68 / 255)
     static let radius: CGFloat = 24
     static let contentDuration = 0.15
+
+    static func underlineColor(for category: Category) -> NSColor {
+        switch category {
+        case .grammar: NSColor(srgbRed: 170 / 255, green: 105 / 255, blue: 112 / 255, alpha: 1)
+        case .aiToneZh: NSColor(srgbRed: 141 / 255, green: 118 / 255, blue: 159 / 255, alpha: 1)
+        case .aiToneEn: NSColor(srgbRed: 94 / 255, green: 133 / 255, blue: 159 / 255, alpha: 1)
+        case .markdown: NSColor(srgbRed: 130 / 255, green: 132 / 255, blue: 127 / 255, alpha: 1)
+        }
+    }
 
     static func font(_ size: CGFloat = 13, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .default)
