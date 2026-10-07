@@ -221,6 +221,15 @@ final class DebugUICapture {
         print("UI screenshot: \(name)")
     }
 
+    /// Stage for the rewrite panel — the view is dark-on-dark like the
+    /// card, so it floats on canvas for legibility.
+    private func rewriteStage(_ model: RewritePanelModel, dark: Bool = false) -> some View {
+        RewritePanelView(model: model)
+            .padding(60)
+            .frame(width: 620, height: 420)
+            .background(dark ? DeAIDesign.darkHost : DeAIDesign.canvas)
+    }
+
     private func scrollToBottom(in view: NSView?) {
         guard let view else { return }
         if let scroll = view as? NSScrollView, let document = scroll.documentView {
@@ -265,10 +274,27 @@ final class DebugUICapture {
             show(DebugUnderlineColors(), size: NSSize(width: 620, height: 400))
             try await save("underline-colors")
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
-                 size: NSSize(width: 540, height: 700))
+                 size: NSSize(width: 560, height: 660))
             try await save("settings")
             scrollToBottom(in: window.contentView)
             try await save("settings-rules")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 1),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-appearance")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 2),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-ai")
+            // rewrite panel states (mock model — same view the panel hosts)
+            let rewriteModel = RewritePanelModel()
+            rewriteModel.phase = .loading
+            rewriteModel.original = "说白了，这一段开头太套话。"
+            show(rewriteStage(rewriteModel), size: NSSize(width: 620, height: 420))
+            try await save("rewrite-loading")
+            rewriteModel.phase = .result
+            rewriteModel.result = "这一段开头直接说重点。"
+            try await save("rewrite-result")
+            rewriteModel.phase = .noChange
+            try await save("rewrite-nochange")
             show(PermissionView(), size: NSSize(width: 420, height: 360))
             try await save("permission")
             show(MenuContent(controller: controller), size: NSSize(width: 300, height: 270))
@@ -276,8 +302,18 @@ final class DebugUICapture {
             show(ContentView(), size: NSSize(width: 700, height: 620))
             try await save("rule-window", after: 0.6)
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
-                 size: NSSize(width: 540, height: 700), dark: true)
+                 size: NSSize(width: 560, height: 660), dark: true)
             try await save("settings-dark")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 1),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-appearance-dark")
+            show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 2),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-ai-dark")
+            rewriteModel.phase = .result
+            show(rewriteStage(rewriteModel, dark: true),
+                 size: NSSize(width: 620, height: 420), dark: true)
+            try await save("rewrite-result-dark")
             show(PermissionView(), size: NSSize(width: 420, height: 360), dark: true)
             try await save("permission-dark")
             show(ContentView(), size: NSSize(width: 700, height: 620), dark: true)

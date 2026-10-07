@@ -140,7 +140,7 @@ final class RewritePanel {
     }
 }
 
-private struct RewritePanelView: View {
+struct RewritePanelView: View {
     @ObservedObject var model: RewritePanelModel
 
     var body: some View {
