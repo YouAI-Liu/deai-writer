@@ -1,0 +1,9 @@
+target/
+build/
+*.xcframework
+DerivedData/
+node_modules/
+pkg/
+core/build/
+.DS_Store
+.build/

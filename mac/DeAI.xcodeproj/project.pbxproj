@@ -1,0 +1,443 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1A62F65F2E026359AEE01AE8 /* DeAICore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4F224A9F7156E04BC16B873 /* DeAICore.xcframework */; };
+		1B7F515C53554BC1C60AFB9E /* DeAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F213714C790AF71579EA4AA /* DeAIApp.swift */; };
+		2B1090B072A5B946C7384D12 /* DeAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B216B51B51310036CFF604E3 /* DeAITests.swift */; };
+		CC0A949819225BC6F704BBF8 /* DeAICore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1A2A9F49D4FC638F50FB12 /* DeAICore.swift */; };
+		EF793542DDE1494985A2A042 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A160E60D2C7FDD627F0103 /* ContentView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1C4A3C2AFCD3D1CE7377FAB8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35D485938FBA38DD9E0F8B8A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 62744AC0B4FB5F5080A93556;
+			remoteInfo = DeAI;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0F213714C790AF71579EA4AA /* DeAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAIApp.swift; sourceTree = "<group>"; };
+		55C01034708A5818B403025D /* DeAICoreFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = DeAICoreFFI.modulemap; sourceTree = "<group>"; };
+		5B481840E0EB9048B7E9802D /* DeAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		69E6AB48EB77ACE0AA612718 /* DeAICoreFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DeAICoreFFI.h; sourceTree = "<group>"; };
+		A7A160E60D2C7FDD627F0103 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B216B51B51310036CFF604E3 /* DeAITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAITests.swift; sourceTree = "<group>"; };
+		B4F224A9F7156E04BC16B873 /* DeAICore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = DeAICore.xcframework; path = ../core/build/DeAICore.xcframework; sourceTree = "<group>"; };
+		C979DF2A6F066C5067F3BD14 /* DeAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC1A2A9F49D4FC638F50FB12 /* DeAICore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAICore.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		462693A57DD1CE9E9A49ABCC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A62F65F2E026359AEE01AE8 /* DeAICore.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		387DD37A24F1076C403D4E30 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B4F224A9F7156E04BC16B873 /* DeAICore.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6E19480049E659B3BA4D2FE4 = {
+			isa = PBXGroup;
+			children = (
+				CB6C71EDAFD5B80686512E19 /* DeAI */,
+				BCF4C6CBC31FD89C1C1E78D6 /* DeAITests */,
+				EA265E43FA5202F3DA5C5C49 /* swift */,
+				387DD37A24F1076C403D4E30 /* Frameworks */,
+				924DB3BF2371B498FD454B17 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		924DB3BF2371B498FD454B17 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5B481840E0EB9048B7E9802D /* DeAI.app */,
+				C979DF2A6F066C5067F3BD14 /* DeAITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BCF4C6CBC31FD89C1C1E78D6 /* DeAITests */ = {
+			isa = PBXGroup;
+			children = (
+				B216B51B51310036CFF604E3 /* DeAITests.swift */,
+			);
+			path = DeAITests;
+			sourceTree = "<group>";
+		};
+		CB6C71EDAFD5B80686512E19 /* DeAI */ = {
+			isa = PBXGroup;
+			children = (
+				A7A160E60D2C7FDD627F0103 /* ContentView.swift */,
+				0F213714C790AF71579EA4AA /* DeAIApp.swift */,
+			);
+			path = DeAI;
+			sourceTree = "<group>";
+		};
+		EA265E43FA5202F3DA5C5C49 /* swift */ = {
+			isa = PBXGroup;
+			children = (
+				CC1A2A9F49D4FC638F50FB12 /* DeAICore.swift */,
+				69E6AB48EB77ACE0AA612718 /* DeAICoreFFI.h */,
+				55C01034708A5818B403025D /* DeAICoreFFI.modulemap */,
+			);
+			name = swift;
+			path = ../core/build/swift;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		38963585F026F4F7F0EF3531 /* DeAITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9E798A441CD8613AA57D398E /* Build configuration list for PBXNativeTarget "DeAITests" */;
+			buildPhases = (
+				D55F290D703E6F72DC232CE3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EDBBCEC21D6899171ED536BC /* PBXTargetDependency */,
+			);
+			name = DeAITests;
+			packageProductDependencies = (
+			);
+			productName = DeAITests;
+			productReference = C979DF2A6F066C5067F3BD14 /* DeAITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		62744AC0B4FB5F5080A93556 /* DeAI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3243E37F481E7B3D0CBEA376 /* Build configuration list for PBXNativeTarget "DeAI" */;
+			buildPhases = (
+				6D0349E243342D2123058896 /* Sources */,
+				462693A57DD1CE9E9A49ABCC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DeAI;
+			packageProductDependencies = (
+			);
+			productName = DeAI;
+			productReference = 5B481840E0EB9048B7E9802D /* DeAI.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		35D485938FBA38DD9E0F8B8A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = C2E84E4C5C97684CE8B85A35 /* Build configuration list for PBXProject "DeAI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 6E19480049E659B3BA4D2FE4;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 924DB3BF2371B498FD454B17 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				62744AC0B4FB5F5080A93556 /* DeAI */,
+				38963585F026F4F7F0EF3531 /* DeAITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6D0349E243342D2123058896 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EF793542DDE1494985A2A042 /* ContentView.swift in Sources */,
+				1B7F515C53554BC1C60AFB9E /* DeAIApp.swift in Sources */,
+				CC0A949819225BC6F704BBF8 /* DeAICore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D55F290D703E6F72DC232CE3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B1090B072A5B946C7384D12 /* DeAITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		EDBBCEC21D6899171ED536BC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 62744AC0B4FB5F5080A93556 /* DeAI */;
+			targetProxy = 1C4A3C2AFCD3D1CE7377FAB8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2771B5884E242F512AE43C88 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		386E72A955BACD400366EAB9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.local.deai.DeAITests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeAI.app/Contents/MacOS/DeAI";
+			};
+			name = Release;
+		};
+		CD542337266FFFA87AFA1EA0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.local.deai.DeAITests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeAI.app/Contents/MacOS/DeAI";
+			};
+			name = Debug;
+		};
+		DBFDBC40DD463F00138DEE7E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		FC0F3500E957177B7D621C22 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_TESTABILITY = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"../core/build\"",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.local.deai;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		FC38BA1266BC0A77C3F24F84 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_TESTABILITY = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"../core/build\"",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.local.deai;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3243E37F481E7B3D0CBEA376 /* Build configuration list for PBXNativeTarget "DeAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC0F3500E957177B7D621C22 /* Debug */,
+				FC38BA1266BC0A77C3F24F84 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9E798A441CD8613AA57D398E /* Build configuration list for PBXNativeTarget "DeAITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CD542337266FFFA87AFA1EA0 /* Debug */,
+				386E72A955BACD400366EAB9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C2E84E4C5C97684CE8B85A35 /* Build configuration list for PBXProject "DeAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBFDBC40DD463F00138DEE7E /* Debug */,
+				2771B5884E242F512AE43C88 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 35D485938FBA38DD9E0F8B8A /* Project object */;
+}

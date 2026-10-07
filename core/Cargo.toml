@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/deai-core",
+    "crates/deai-ffi",
+    "crates/deai-wasm",
+]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }

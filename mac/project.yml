@@ -1,0 +1,46 @@
+name: DeAI
+options:
+  bundleIdPrefix: com.local.deai
+targets:
+  DeAI:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: DeAI
+      - path: ../core/build/swift
+    dependencies:
+      - framework: ../core/build/DeAICore.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.deai
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        SWIFT_VERSION: "5.0"
+        ENABLE_TESTABILITY: YES
+        CODE_SIGNING_ALLOWED: NO
+  DeAITests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: DeAITests
+    dependencies:
+      - target: DeAI
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_ALLOWED: NO
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/DeAI.app/Contents/MacOS/DeAI
+        BUNDLE_LOADER: $(TEST_HOST)
+schemes:
+  DeAI:
+    build:
+      targets:
+        DeAI: all
+        DeAITests:
+          - test
+    test:
+      targets:
+        - DeAITests
