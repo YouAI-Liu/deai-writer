@@ -8,9 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		04FC1A24F0A7EC402891F4B0 /* SuggestionCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6952B98BE2FD14A7B75F4816 /* SuggestionCardView.swift */; };
+		05E2FF0FDABA015B135EBC48 /* UnderlineAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */; };
 		1A62F65F2E026359AEE01AE8 /* DeAICore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4F224A9F7156E04BC16B873 /* DeAICore.xcframework */; };
 		1E409E04070FB33A8F651F12 /* SuggestionCardPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66254E52FD4AA98A00E50DD1 /* SuggestionCardPanel.swift */; };
 		2B1090B072A5B946C7384D12 /* DeAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B216B51B51310036CFF604E3 /* DeAITests.swift */; };
+		32B0AC02D15B21E845D9BC70 /* AppGroups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2248647D78AC1699CFB9EDB1 /* AppGroups.swift */; };
 		4537DF9DC77FBF1B1CD17BA5 /* AXElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = B997158921FEFFBDF3690B66 /* AXElement.swift */; };
 		48679957256D942F83327749 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AEA87ABCFDC937676EE5CD /* AppController.swift */; };
 		543B5E85FE68B05D17ABF35B /* TextTargetResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8A2EF7F8118937C86B67CA /* TextTargetResolver.swift */; };
@@ -43,12 +45,14 @@
 /* Begin PBXFileReference section */
 		08AEA87ABCFDC937676EE5CD /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
 		13D91D9F8711BE93EE3B772F /* Config-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Config-Debug.xcconfig"; sourceTree = "<group>"; };
+		2248647D78AC1699CFB9EDB1 /* AppGroups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroups.swift; sourceTree = "<group>"; };
 		35D5A0052CE6F411AC885598 /* CheckService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckService.swift; sourceTree = "<group>"; };
 		4712B5A62B8F80DFDC3368E2 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		55C01034708A5818B403025D /* DeAICoreFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = DeAICoreFFI.modulemap; sourceTree = "<group>"; };
 		5B481840E0EB9048B7E9802D /* DeAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CCC5C88F697ADBCC98A01AC /* ParagraphGrammarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParagraphGrammarCache.swift; sourceTree = "<group>"; };
 		648D3A4E6DBEA10E84D355CE /* OverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayWindow.swift; sourceTree = "<group>"; };
+		657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnderlineAppearance.swift; sourceTree = "<group>"; };
 		66254E52FD4AA98A00E50DD1 /* SuggestionCardPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCardPanel.swift; sourceTree = "<group>"; };
 		694283D53AC8F23B940F5360 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		6952B98BE2FD14A7B75F4816 /* SuggestionCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCardView.swift; sourceTree = "<group>"; };
@@ -207,8 +211,10 @@
 		EA992A3F3940D734F9F830B2 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				2248647D78AC1699CFB9EDB1 /* AppGroups.swift */,
 				4712B5A62B8F80DFDC3368E2 /* AppSettings.swift */,
 				694283D53AC8F23B940F5360 /* SettingsView.swift */,
+				657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -293,6 +299,7 @@
 			files = (
 				4537DF9DC77FBF1B1CD17BA5 /* AXElement.swift in Sources */,
 				48679957256D942F83327749 /* AppController.swift in Sources */,
+				32B0AC02D15B21E845D9BC70 /* AppGroups.swift in Sources */,
 				7E171612304775F1268EAD5D /* AppSettings.swift in Sources */,
 				9AB4B38B3DDA96EAFF30BDC0 /* CheckService.swift in Sources */,
 				9B85E1FE0BCC45C707FF5E75 /* ClickMonitor.swift in Sources */,
@@ -309,6 +316,7 @@
 				643595E12A10B7BD87DB1124 /* TextGeometry.swift in Sources */,
 				643FA5DC30F64AB69996F21C /* TextReplacer.swift in Sources */,
 				543B5E85FE68B05D17ABF35B /* TextTargetResolver.swift in Sources */,
+				05E2FF0FDABA015B135EBC48 /* UnderlineAppearance.swift in Sources */,
 				AFC4BCE8A28FD0960B5E0831 /* UnderlineRenderer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

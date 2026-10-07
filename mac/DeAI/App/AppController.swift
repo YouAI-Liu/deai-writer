@@ -378,6 +378,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
 
     private func render() {
         let t0 = CFAbsoluteTimeGetCurrent()
+        overlay.appearance = settings.underline
         guard settings.autoUnderline else {
             overlay.hideAll()
             clickMonitor.setHitRects([])
@@ -517,6 +518,16 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             writeDebugState()
             return
         }
+        if cmd.action == .dumpPanels {
+            // snapshot overlay panels to <debugStatePath>.panels/
+            let base = UserDefaults.standard.string(forKey: "deai.debugStatePath")
+                ?? NSTemporaryDirectory()
+            overlay.dumpPanelImages(
+                to: URL(fileURLWithPath: base + ".panels")
+            )
+            writeDebugState()
+            return
+        }
         let matches = positionedFindings(ruleId: cmd.ruleId)
         guard matches.indices.contains(cmd.index) else {
             log.notice("debug command \(cmd.action.rawValue): no finding \(cmd.index) for \(cmd.ruleId)")
@@ -542,7 +553,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             ignoreFinding(key: key, finding: pf.finding, matched: matched)
         case .disableRule:
             disableRule(key: key, finding: pf.finding)
-        case .dismissCard:
+        case .dismissCard, .dumpPanels:
             break // handled above
         }
         writeDebugState()
@@ -564,13 +575,46 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         tracker.refresh()
     }
 
-    private func settingsChanged() {
-        if !settings.autoUnderline {
-            overlay.hideAll()
-            clickMonitor.setHitRects([])
+    /// Snapshot of the settings that influence check output. Appearance-only
+    /// edits (underline style) don't change it, so slider drags repaint
+    /// instead of re-running checks on every tick.
+    private struct CheckFingerprint: Equatable {
+        var autoUnderline: Bool
+        var grammar: Bool
+        var aiToneZh: Bool
+        var aiToneEn: Bool
+        var markdown: Bool
+        var sensitivity: Int
+        var disabledRuleIds: Set<String>
+        var appRules: [String: AppRule]
+        var groupRules: [AppGroup: GroupRule]
+
+        init(_ s: AppSettings) {
+            autoUnderline = s.autoUnderline
+            grammar = s.grammar
+            aiToneZh = s.aiToneZh
+            aiToneEn = s.aiToneEn
+            markdown = s.markdown
+            sensitivity = s.sensitivity
+            disabledRuleIds = s.disabledRuleIds
+            appRules = s.appRules
+            groupRules = s.groupRules
         }
-        // re-check all active targets under the new settings
-        for key in states.keys { scheduleCheck(key, now: true) }
+    }
+
+    private var lastCheckFingerprint: CheckFingerprint?
+
+    private func settingsChanged() {
+        let fingerprint = CheckFingerprint(settings)
+        if fingerprint != lastCheckFingerprint {
+            lastCheckFingerprint = fingerprint
+            // re-check all active targets under the new settings
+            for key in states.keys { scheduleCheck(key, now: true) }
+        }
+        // Repaint immediately: applies underline-appearance changes to the
+        // already-positioned findings, and clears overlays when
+        // autoUnderline was switched off.
+        render()
     }
 
     // MARK: - debug state dump
@@ -706,6 +750,8 @@ struct DebugCommand {
         case ignore
         case disableRule
         case dismissCard
+        /// dump overlay panel contents to PNG (live-render QA)
+        case dumpPanels
     }
 
     let action: Action

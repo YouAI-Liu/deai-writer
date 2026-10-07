@@ -1,0 +1,157 @@
+import Foundation
+
+/// 应用类型: a coarse grouping of bundle ids so a whole class of apps can be
+/// enabled/tuned at once. Per-app `AppRule`s still override the group.
+public enum AppGroup: String, Codable, CaseIterable {
+    case browser
+    case office
+    case notes
+    case communication
+    case code
+    case sensitive
+    case other
+
+    public var displayName: String {
+        switch self {
+        case .browser: return "浏览器"
+        case .office: return "Office 与文档"
+        case .notes: return "笔记"
+        case .communication: return "聊天与邮件"
+        case .code: return "代码编辑器"
+        case .sensitive: return "终端与密码"
+        case .other: return "其他"
+        }
+    }
+
+    /// Example apps shown as a caption in settings.
+    public var examples: String {
+        switch self {
+        case .browser: return "Safari、Chrome、Arc、Firefox"
+        case .office: return "Word、Pages、WPS、Excel、Keynote"
+        case .notes: return "备忘录、Obsidian、Notion、Bear、文本编辑"
+        case .communication: return "邮件、微信、Slack、飞书、钉钉"
+        case .code: return "VSCode、Cursor、Zed、Xcode、JetBrains"
+        case .sensitive: return "终端、iTerm2、Warp、钥匙串、1Password"
+        case .other: return "未归类的应用"
+        }
+    }
+}
+
+/// The four check categories, used for per-group check selection.
+public enum CheckKind: String, Codable, CaseIterable {
+    case grammar
+    case aiToneZh
+    case aiToneEn
+    case markdown
+
+    public var shortName: String {
+        switch self {
+        case .grammar: return "语法"
+        case .aiToneZh: return "中文"
+        case .aiToneEn: return "英文"
+        case .markdown: return "MD"
+        }
+    }
+}
+
+/// Per-group switch: whether DeAI serves the group and which checks run.
+public struct GroupRule: Codable, Equatable {
+    public var enabled: Bool
+    public var checks: Set<CheckKind>
+
+    public init(enabled: Bool, checks: Set<CheckKind>) {
+        self.enabled = enabled
+        self.checks = checks
+    }
+}
+
+public extension AppGroup {
+    /// Defaults: browsers are covered by the Chrome extension and
+    /// terminals/password managers are sensitive — both start disabled.
+    /// Code editors skip the markdown-residue check (they legitimately hold
+    /// markdown source); every other group runs all four checks.
+    static func defaultRule(for group: AppGroup) -> GroupRule {
+        switch group {
+        case .browser, .sensitive:
+            return GroupRule(enabled: false, checks: Set(CheckKind.allCases))
+        case .code:
+            return GroupRule(enabled: true, checks: Set(CheckKind.allCases).subtracting([.markdown]))
+        case .office, .notes, .communication, .other:
+            return GroupRule(enabled: true, checks: Set(CheckKind.allCases))
+        }
+    }
+
+    static var defaultRules: [AppGroup: GroupRule] {
+        Dictionary(uniqueKeysWithValues: allCases.map { ($0, defaultRule(for: $0)) })
+    }
+
+    /// Bundle-id → group lookup. Unknown apps land in `.other`.
+    static func group(for bundleId: String) -> AppGroup {
+        if bundleId.hasPrefix("com.jetbrains.") { return .code }
+        return table[bundleId] ?? .other
+    }
+
+    private static let table: [String: AppGroup] = [
+        // 浏览器
+        "com.apple.Safari": .browser,
+        "com.apple.SafariTechnologyPreview": .browser,
+        "com.google.Chrome": .browser,
+        "com.google.Chrome.canary": .browser,
+        "com.google.Chrome.beta": .browser,
+        "com.google.Chrome.dev": .browser,
+        "com.brave.Browser": .browser,
+        "com.microsoft.edgemac": .browser,
+        "com.microsoft.edgemac.Canary": .browser,
+        "com.microsoft.edgemac.Dev": .browser,
+        "com.microsoft.edgemac.Beta": .browser,
+        "company.thebrowser.Browser": .browser, // Arc
+        "org.mozilla.firefox": .browser,
+        "com.operasoftware.Opera": .browser,
+        "com.vivaldi.Vivaldi": .browser,
+        "com.duckduckgo.macos.browser": .browser,
+        // Office 与文档
+        "com.microsoft.Word": .office,
+        "com.microsoft.Excel": .office,
+        "com.microsoft.Powerpoint": .office,
+        "com.apple.iWork.Pages": .office,
+        "com.apple.iWork.Numbers": .office,
+        "com.apple.iWork.Keynote": .office,
+        "com.kingsoft.wpsoffice.mac": .office, // WPS
+        // 笔记
+        "com.apple.Notes": .notes,
+        "md.obsidian": .notes,
+        "notion.id": .notes,
+        "com.bear-writer.BearMac": .notes,
+        "com.apple.TextEdit": .notes,
+        // 聊天与邮件
+        "com.apple.mail": .communication,
+        "com.microsoft.Outlook": .communication,
+        "com.tinyspeck.slackmacgap": .communication, // Slack
+        "com.tencent.xinWeChat": .communication, // WeChat
+        "com.electron.lark": .communication, // Lark/Feishu
+        "com.bytedance.lark.mac": .communication, // Feishu
+        "com.alibaba.DingTalkMac": .communication,
+        "com.alibabagroup.dingtalk": .communication,
+        "ru.keepcoder.Telegram": .communication,
+        "com.apple.MobileSMS": .communication, // Messages
+        "com.tencent.qq": .communication,
+        // 代码编辑器
+        "com.microsoft.VSCode": .code,
+        "com.todesktop.230313mzl4w4u92": .code, // Cursor
+        "dev.zed.Zed": .code,
+        "com.apple.dt.Xcode": .code,
+        "com.sublimetext.4": .code,
+        "com.t3tools.t3code": .code, // T3 Code
+        // 终端与密码 (sensitive)
+        "com.apple.Terminal": .sensitive,
+        "com.googlecode.iterm2": .sensitive,
+        "dev.warp.Warp-Stable": .sensitive,
+        "com.mitchellh.ghostty": .sensitive,
+        "com.apple.keychainaccess": .sensitive,
+        "com.1password.1password": .sensitive,
+        "com.agilebits.onepassword7": .sensitive,
+        // never underline ourselves, whichever bundle id the build uses
+        "com.local.deai": .sensitive,
+        "com.local.deai.debug": .sensitive,
+    ]
+}

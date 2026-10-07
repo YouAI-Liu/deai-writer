@@ -46,6 +46,14 @@ public final class AppSettings: ObservableObject {
     @Published public var appRules: [String: AppRule] {
         didSet { save() }
     }
+    /// Underline appearance (color/shape per category + global knobs).
+    @Published public var underline: UnderlineAppearance {
+        didSet { save() }
+    }
+    /// Per-应用类型 rules; missing groups fall back to `AppGroup.defaultRule`.
+    @Published public var groupRules: [AppGroup: GroupRule] {
+        didSet { save() }
+    }
 
     /// Session-scoped ignores: `(ruleId, matchedText)` pairs — cleared on
     /// relaunch, intentionally not persisted.
@@ -60,34 +68,6 @@ public final class AppSettings: ObservableObject {
         }
     }
 
-    /// Bundle ids where DeAI is disabled by default (browsers ship their own
-    /// extension surface; terminals/Keychain/1Password are sensitive).
-    public static let defaultDisabledApps: Set<String> = [
-        "com.google.Chrome",
-        "com.google.Chrome.canary",
-        "com.brave.Browser",
-        "com.microsoft.edgemac",
-        "company.thebrowser.Browser",
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-        "com.apple.keychainaccess",
-        "com.1password.1password",
-        "com.agilebits.onepassword7",
-        "com.local.deai",
-    ]
-
-    /// Bundle ids where markdown residue checks default to off (editors that
-    /// legitimately contain markdown source).
-    public static let defaultMarkdownOffApps: Set<String> = [
-        "com.microsoft.VSCode",
-        "com.todesktop.230313mzl4w4u92", // Cursor
-        "dev.zed.Zed",
-        "md.obsidian",
-        "com.apple.dt.Xcode",
-        "com.sublimetext.4",
-        "com.t3tools.t3code",
-    ]
-
     public init(userDefaults: UserDefaults = .standard) {
         var stored: Stored?
         if let data = userDefaults.data(forKey: Self.defaultsKey) {
@@ -101,6 +81,14 @@ public final class AppSettings: ObservableObject {
         self.sensitivity = stored?.sensitivity ?? 2
         self.disabledRuleIds = stored?.disabledRuleIds ?? []
         self.appRules = stored?.appRules ?? [:]
+        self.underline = stored?.underline ?? .default
+        var rules = AppGroup.defaultRules
+        if let storedRules = stored?.groupRules {
+            for (key, rule) in storedRules {
+                if let group = AppGroup(rawValue: key) { rules[group] = rule }
+            }
+        }
+        self.groupRules = rules
         self.userDefaults = userDefaults
     }
 
@@ -115,6 +103,44 @@ public final class AppSettings: ObservableObject {
         var sensitivity: Int
         var disabledRuleIds: Set<String>
         var appRules: [String: AppRule]
+        var underline: UnderlineAppearance
+        /// JSON object keyed by `AppGroup.rawValue` (Swift encodes
+        /// enum-keyed dictionaries as arrays — keep a stable shape).
+        var groupRules: [String: GroupRule]
+
+        init(
+            autoUnderline: Bool, grammar: Bool, aiToneZh: Bool,
+            aiToneEn: Bool, markdown: Bool, sensitivity: Int,
+            disabledRuleIds: Set<String>, appRules: [String: AppRule],
+            underline: UnderlineAppearance, groupRules: [String: GroupRule]
+        ) {
+            self.autoUnderline = autoUnderline
+            self.grammar = grammar
+            self.aiToneZh = aiToneZh
+            self.aiToneEn = aiToneEn
+            self.markdown = markdown
+            self.sensitivity = sensitivity
+            self.disabledRuleIds = disabledRuleIds
+            self.appRules = appRules
+            self.underline = underline
+            self.groupRules = groupRules
+        }
+
+        /// Tolerant decode: settings written by older builds (which lack the
+        /// newer keys) must load instead of failing wholesale.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            autoUnderline = try c.decodeIfPresent(Bool.self, forKey: .autoUnderline) ?? true
+            grammar = try c.decodeIfPresent(Bool.self, forKey: .grammar) ?? true
+            aiToneZh = try c.decodeIfPresent(Bool.self, forKey: .aiToneZh) ?? true
+            aiToneEn = try c.decodeIfPresent(Bool.self, forKey: .aiToneEn) ?? true
+            markdown = try c.decodeIfPresent(Bool.self, forKey: .markdown) ?? true
+            sensitivity = try c.decodeIfPresent(Int.self, forKey: .sensitivity) ?? 2
+            disabledRuleIds = try c.decodeIfPresent(Set<String>.self, forKey: .disabledRuleIds) ?? []
+            appRules = try c.decodeIfPresent([String: AppRule].self, forKey: .appRules) ?? [:]
+            underline = try c.decodeIfPresent(UnderlineAppearance.self, forKey: .underline) ?? .default
+            groupRules = try c.decodeIfPresent([String: GroupRule].self, forKey: .groupRules) ?? [:]
+        }
     }
 
     private func save() {
@@ -126,28 +152,53 @@ public final class AppSettings: ObservableObject {
             markdown: markdown,
             sensitivity: sensitivity,
             disabledRuleIds: disabledRuleIds,
-            appRules: appRules
+            appRules: appRules,
+            underline: underline,
+            groupRules: Dictionary(
+                uniqueKeysWithValues: groupRules.map { ($0.key.rawValue, $0.value) }
+            )
         )
         if let data = try? JSONEncoder().encode(stored) {
             userDefaults.set(data, forKey: Self.defaultsKey)
         }
     }
 
-    // MARK: - per-app lookups
+    // MARK: - group + per-app lookups
+
+    /// The effective rule for `bundleId`'s group (defaults when unset).
+    public func groupRule(for bundleId: String) -> GroupRule {
+        let group = AppGroup.group(for: bundleId)
+        return groupRules[group] ?? AppGroup.defaultRule(for: group)
+    }
 
     /// Whether DeAI should run inside `bundleId` at all.
     public func isAppEnabled(_ bundleId: String) -> Bool {
         // never track ourselves — uses the live bundle id so Debug builds
-        // (com.local.deai.debug) are excluded too
+        // (com.local.deai.debug) are excluded too, plus the whole
+        // com.local.deai[.*] family so Debug and Release builds ignore
+        // each other (replacing the old defaultDisabledApps entry)
         if let own = Bundle.main.bundleIdentifier, bundleId == own { return false }
+        if bundleId == "com.local.deai" || bundleId.hasPrefix("com.local.deai.") {
+            return false
+        }
         if let rule = appRules[bundleId] { return rule.enabled }
-        return !Self.defaultDisabledApps.contains(bundleId)
+        return groupRule(for: bundleId).enabled
+    }
+
+    /// Whether check `kind` may run inside `bundleId`: the group's check set
+    /// gates everything; for markdown a per-app `AppRule.markdown` can only
+    /// narrow further (never re-enable a check the group turned off).
+    public func isCheckEnabled(_ kind: CheckKind, for bundleId: String) -> Bool {
+        guard groupRule(for: bundleId).checks.contains(kind) else { return false }
+        if kind == .markdown, let rule = appRules[bundleId], !rule.markdown {
+            return false
+        }
+        return true
     }
 
     /// Whether markdown residue checks apply inside `bundleId`.
     public func markdownEnabled(for bundleId: String) -> Bool {
-        if let rule = appRules[bundleId] { return rule.markdown }
-        return !Self.defaultMarkdownOffApps.contains(bundleId)
+        isCheckEnabled(.markdown, for: bundleId)
     }
 
     /// Sorted rules for the settings list.
@@ -155,20 +206,26 @@ public final class AppSettings: ObservableObject {
         appRules.sorted { $0.key < $1.key }
     }
 
-    public func setAppEnabled(_ bundleId: String, _ enabled: Bool) {
-        var rule = appRules[bundleId] ?? AppRule(
+    /// A fresh per-app rule for `bundleId`, with markdown defaulting to the
+    /// group's markdown check.
+    public func defaultAppRule(for bundleId: String) -> AppRule {
+        AppRule(
             enabled: true,
-            markdown: !Self.defaultMarkdownOffApps.contains(bundleId)
+            markdown: groupRule(for: bundleId).checks.contains(.markdown)
         )
+    }
+
+    public func setAppEnabled(_ bundleId: String, _ enabled: Bool) {
+        var rule = appRules[bundleId] ?? defaultAppRule(for: bundleId)
         rule.enabled = enabled
         appRules[bundleId] = rule
     }
 
     public func checkOptions(for bundleId: String) -> CheckOptions {
         CheckOptions(
-            grammar: grammar,
-            aiToneEn: aiToneEn,
-            aiToneZh: aiToneZh,
+            grammar: grammar && isCheckEnabled(.grammar, for: bundleId),
+            aiToneEn: aiToneEn && isCheckEnabled(.aiToneEn, for: bundleId),
+            aiToneZh: aiToneZh && isCheckEnabled(.aiToneZh, for: bundleId),
             markdown: markdown && markdownEnabled(for: bundleId),
             sensitivity: UInt8(clamping: sensitivity)
         )
