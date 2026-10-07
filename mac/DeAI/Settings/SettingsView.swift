@@ -5,11 +5,22 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     /// Frontmost non-DeAI app bundle id (for "add current app").
     var currentBundleId: String?
+    /// Tab inside 检查 the view opens on (tests mount each pane directly).
+    var initialTab: Int
+
+    init(settings: AppSettings, currentBundleId: String? = nil, initialTab: Int = 0) {
+        self.settings = settings
+        self.currentBundleId = currentBundleId
+        self.initialTab = initialTab
+    }
 
     var body: some View {
         TabView {
-            CheckSettingsTab(settings: settings, currentBundleId: currentBundleId)
-                .tabItem { Label("检查", systemImage: "checklist") }
+            CheckSettingsTab(
+                settings: settings, currentBundleId: currentBundleId,
+                initialTab: initialTab
+            )
+            .tabItem { Label("检查", systemImage: "checklist") }
             AISettingsTab(settings: settings)
                 .tabItem { Label("AI 改写", systemImage: "wand.and.stars") }
         }

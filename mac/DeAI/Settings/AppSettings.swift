@@ -85,7 +85,7 @@ public final class AppSettings: ObservableObject {
         }
     }
 
-    public init(
+    init(
         userDefaults: UserDefaults = .standard,
         secrets: SecretStore = KeychainSecretStore()
     ) {
