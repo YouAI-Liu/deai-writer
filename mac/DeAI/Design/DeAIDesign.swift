@@ -40,6 +40,14 @@ enum DeAIDesign {
     static let controlRadius: CGFloat = 8
     static let contentDuration = 0.15
 
+    /// Pill silhouette for fill+stroke borders. `Capsule`'s fill path uses
+    /// circular end caps but its stroke (border) path uses continuous
+    /// corners, so a stroked `Capsule` shows a ghost squircle outline along
+    /// the near-vertical sides; this shape keeps both paths identical.
+    static var pill: RoundedRectangle {
+        RoundedRectangle(cornerRadius: .infinity, style: .circular)
+    }
+
     private static func rgb(_ hex: UInt32) -> NSColor {
         NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255,
                 green: CGFloat((hex >> 8) & 255) / 255,
@@ -59,6 +67,8 @@ enum DeAIDesign {
         case .aiToneZh: return rgb(dark ? 0xB69FC8 : 0x8D769F)
         case .aiToneEn: return rgb(dark ? 0x8FB3CB : 0x5E859F)
         case .markdown: return rgb(dark ? 0xAFB1AB : 0x82847F)
+        // teal — the accent family (0xC6613F-ish) is already taken
+        case .personal: return rgb(dark ? 0x7FBFB5 : 0x3E8A80)
         }
     }
 
@@ -116,10 +126,10 @@ struct DeAIButtonStyle: ButtonStyle {
             .padding(.horizontal, compact ? 12 : 18)
             .padding(.vertical, compact ? 8 : 12)
             .foregroundStyle(secondary ? DeAIDesign.text : DeAIDesign.onAccent)
-            .background(secondary ? DeAIDesign.surface : DeAIDesign.accent, in: Capsule())
+            .background(secondary ? DeAIDesign.surface : DeAIDesign.accent, in: DeAIDesign.pill)
             .overlay {
                 if secondary {
-                    Capsule().strokeBorder(DeAIDesign.border, lineWidth: 1)
+                    DeAIDesign.pill.strokeBorder(DeAIDesign.border, lineWidth: 1)
                 }
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
@@ -132,6 +142,7 @@ struct DeAIToggleStyle: ToggleStyle {
     /// `.labelsHidden()` (which only affects macOS 15+ environments), this
     /// reliably suppresses the label on our deployment target (14.0).
     var showsLabel = true
+    @Environment(\.deaiUILanguage) private var lang
     @DeAIReducedMotion private var reduceMotion: Bool
 
     func makeBody(configuration: Configuration) -> some View {
@@ -152,8 +163,12 @@ struct DeAIToggleStyle: ToggleStyle {
                     }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(configuration.isOn ? "关闭" : "开启")
-            .accessibilityValue(configuration.isOn ? "已开启" : "已关闭")
+            .accessibilityLabel(
+                L10n.t(configuration.isOn ? .turnOff : .turnOn, lang)
+            )
+            .accessibilityValue(
+                L10n.t(configuration.isOn ? .valueOn : .valueOff, lang)
+            )
         }
         .animation(reduceMotion ? nil : DeAIDesign.motion(false), value: configuration.isOn)
         .accessibilityRepresentation {
@@ -191,10 +206,10 @@ struct DeAIChipToggleStyle: ToggleStyle {
             .background(
                 !isEnabled ? DeAIDesign.track
                     : configuration.isOn ? DeAIDesign.accent : DeAIDesign.surface,
-                in: Capsule()
+                in: DeAIDesign.pill
             )
             .overlay {
-                Capsule().strokeBorder(
+                DeAIDesign.pill.strokeBorder(
                     DeAIDesign.border,
                     lineWidth: isEnabled && configuration.isOn ? 0 : 1
                 )
@@ -210,12 +225,18 @@ struct DeAIChipToggleStyle: ToggleStyle {
 
 struct SensitivityControl: View {
     @Binding var selection: Int
+    @Environment(\.deaiUILanguage) private var lang
     @DeAIReducedMotion private var reduceMotion: Bool
     @Namespace private var highlight
 
+    private var titles: [String] {
+        [L10n.t(.sensStrict, lang), L10n.t(.sensStandard, lang),
+         L10n.t(.sensSensitive, lang)]
+    }
+
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(Array(["严格", "标准", "敏感"].enumerated()), id: \.offset) { index, title in
+            ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
                 Button {
                     withAnimation(DeAIDesign.motion(reduceMotion)) { selection = index + 1 }
                 } label: {
@@ -225,7 +246,7 @@ struct SensitivityControl: View {
                         .foregroundStyle(selection == index + 1 ? DeAIDesign.text : DeAIDesign.secondaryText)
                         .background {
                             if selection == index + 1 {
-                                let capsule = Capsule().fill(DeAIDesign.surface)
+                                let capsule = DeAIDesign.pill.fill(DeAIDesign.surface)
                                 if reduceMotion {
                                     capsule.transition(.opacity)
                                 } else {
@@ -235,7 +256,7 @@ struct SensitivityControl: View {
                         }
                         .overlay {
                             if selection == index + 1 {
-                                Capsule().strokeBorder(DeAIDesign.border, lineWidth: 1)
+                                DeAIDesign.pill.strokeBorder(DeAIDesign.border, lineWidth: 1)
                             }
                         }
                 }

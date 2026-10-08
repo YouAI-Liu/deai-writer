@@ -2,15 +2,55 @@ import Foundation
 
 enum LLMError: LocalizedError {
     case invalidBaseURL(String)
-    case http(Int, String)
-    case badResponse(String)
+    /// `kind` carries the status-mapped prefix; `server` is the server's own
+    /// message (already truncated) — both render per language in `message`.
+    case http(status: Int, kind: HTTPErrorKind, server: String)
+    case badResponse(BadResponseKind)
 
-    var errorDescription: String? {
+    enum HTTPErrorKind {
+        case generic
+        case unauthorized
+        case rateLimited
+    }
+
+    enum BadResponseKind {
+        case unparseable
+        case emptyText
+    }
+
+    /// Default (zh) — `LocalizedError` conformance for legacy callers.
+    var errorDescription: String? { message(.zh) }
+
+    func message(_ lang: UILanguage) -> String {
         switch self {
-        case .invalidBaseURL(let u): return "无效的 Base URL：\(u)"
-        case .http(_, let m): return m
-        case .badResponse(let m): return m
+        case .invalidBaseURL(let u):
+            return L10n.f(.errorInvalidBaseURL, lang, u)
+        case .http(let status, let kind, let server):
+            let prefix: String?
+            switch kind {
+            case .generic: prefix = nil
+            case .unauthorized: prefix = L10n.t(.errorHTTPAuth, lang)
+            case .rateLimited: prefix = L10n.t(.errorHTTPRate, lang)
+            }
+            if let prefix {
+                return server.isEmpty
+                    ? prefix
+                    : prefix + (lang == .zh ? "：" : ": ") + server
+            }
+            return server.isEmpty ? "HTTP \(status)" : server
+        case .badResponse(.unparseable):
+            return L10n.t(.errorParseResponse, lang)
+        case .badResponse(.emptyText):
+            return L10n.t(.errorNoText, lang)
         }
+    }
+}
+
+extension Error {
+    /// Localized UI text: `LLMError` renders in the UI language, other
+    /// errors (URLError etc.) keep the system-localized description.
+    func deaiMessage(_ lang: UILanguage) -> String {
+        (self as? LLMError)?.message(lang) ?? localizedDescription
     }
 }
 
@@ -101,13 +141,15 @@ struct LLMClient {
     ) throws -> String {
         guard (200..<300).contains(statusCode) else {
             throw LLMError.http(
-                statusCode, errorMessage(from: data, status: statusCode)
+                status: statusCode,
+                kind: Self.httpErrorKind(statusCode),
+                server: serverMessage(from: data)
             )
         }
         guard let obj = try? JSONSerialization.jsonObject(with: data)
             as? [String: Any]
         else {
-            throw LLMError.badResponse("无法解析响应")
+            throw LLMError.badResponse(.unparseable)
         }
         switch format {
         case .openAIChat:
@@ -142,7 +184,7 @@ struct LLMClient {
             }
             if !parts.isEmpty { return parts.joined() }
         }
-        throw LLMError.badResponse("响应中没有文本内容")
+        throw LLMError.badResponse(.emptyText)
     }
 
     /// Server error message: `error.message` (object), `error` (string), or
@@ -161,18 +203,14 @@ struct LLMClient {
         return String(raw.prefix(200))
     }
 
-    private static func errorMessage(from data: Data, status: Int) -> String {
-        let server = serverMessage(from: data)
-        let prefix: String?
+    /// Status → localized prefix bucket; `LLMError.http` renders the actual
+    /// "prefix: server" composition per language.
+    private static func httpErrorKind(_ status: Int) -> LLMError.HTTPErrorKind {
         switch status {
-        case 401, 403: prefix = "API Key 无效或未授权"
-        case 429: prefix = "请求过于频繁或额度已用完"
-        default: prefix = nil
+        case 401, 403: return .unauthorized
+        case 429: return .rateLimited
+        default: return .generic
         }
-        if let prefix {
-            return server.isEmpty ? prefix : "\(prefix)：\(server)"
-        }
-        return server.isEmpty ? "HTTP \(status)" : server
     }
 
     /// Model hygiene: drop think blocks, one surrounding code fence, and

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Observable state behind the rewrite panel. Written only on main.
@@ -14,15 +15,29 @@ final class RewritePanelModel: ObservableObject {
     @Published var original = ""
     @Published var result = ""
     @Published var errorMessage = ""
+    /// UI language — pushed by the controller / capture fixture so an open
+    /// panel re-renders live on a settings change.
+    @Published var lang: UILanguage = .zh
     /// "请先在设置中配置 AI 服务" — the error then gets an 打开设置 button.
     @Published var showOpenSettings = false
     /// Retrying only makes sense with a captured rewrite context.
     @Published var canRetry = false
 
+    // 记住改法: word-level changed pairs (original → result) offered as
+    // checkboxes once a result arrives.
+    @Published var rememberPairs: [RewriteDiff.Pair] = []
+    /// Checked pair indexes — everything starts checked.
+    @Published var rememberChecked: Set<Int> = []
+    @Published var rememberExpanded = false
+    /// Set after 加入词库 succeeds — the button becomes a confirmation.
+    @Published var rememberSaved = false
+
     var onAccept: () -> Void = {}
     var onRetry: () -> Void = {}
     var onCancel: () -> Void = {}
     var onOpenSettings: () -> Void = {}
+    /// Checked `Pair`s the user wants as replace lexicon entries.
+    var onAddLexiconPairs: ([RewriteDiff.Pair]) -> Void = { _ in }
 }
 
 /// Non-activating borderless panel for the AI rewrite flow — same
@@ -35,6 +50,8 @@ final class RewritePanel {
     private var escMonitor: Any?
     private var globalEscMonitor: Any?
     private var outsideMonitor: Any?
+    /// Refit when view-only state changes (e.g. 记住改法 expansion).
+    private var modelCancellable: AnyCancellable?
 
     /// Fires on every dismissal — the controller cancels the in-flight
     /// request and clears the debug state here.
@@ -84,6 +101,9 @@ final class RewritePanel {
         panel.setFrameOrigin(origin)
         panel.orderFront(nil)
         self.panel = panel
+        modelCancellable = model.objectWillChange.sink { [weak self] _ in
+            self?.update()
+        }
 
         escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
             [weak self] e in
@@ -133,6 +153,7 @@ final class RewritePanel {
             globalEscMonitor = nil
         }
         if let m = outsideMonitor { NSEvent.removeMonitor(m); outsideMonitor = nil }
+        modelCancellable = nil
         let wasShowing = panel != nil
         panel?.orderOut(nil)
         panel = nil
@@ -142,11 +163,12 @@ final class RewritePanel {
 
 struct RewritePanelView: View {
     @ObservedObject var model: RewritePanelModel
+    private var lang: UILanguage { model.lang }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("AI 改写")
+                Text(L10n.t(.rewriteTitle, lang))
                     .font(DeAIDesign.font(16, weight: .semibold))
                 Spacer()
                 Button { model.onCancel() } label: {
@@ -156,33 +178,35 @@ struct RewritePanelView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(DeAIDesign.muted)
-                .accessibilityLabel("关闭")
+                .deaiTooltip(L10n.t(.closeTooltip, lang))
+                .accessibilityLabel(L10n.t(.closeTooltip, lang))
             }
             switch model.phase {
             case .loading:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("AI 改写中…").foregroundStyle(DeAIDesign.muted)
+                    Text(L10n.t(.rewriting, lang)).foregroundStyle(DeAIDesign.muted)
                     Spacer()
-                    Button("取消") { model.onCancel() }
+                    Button(L10n.t(.cancelButton, lang)) { model.onCancel() }
                 }
             case .result:
-                labeled("原文", text: model.original, muted: true)
+                labeled(L10n.t(.originalLabel, lang), text: model.original, muted: true)
                 Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
-                labeled("改写", text: model.result, muted: false)
+                labeled(L10n.t(.rewriteLabel, lang), text: model.result, muted: false)
+                if !model.rememberPairs.isEmpty { rememberBlock }
                 HStack(spacing: 16) {
-                    Button("替换") { model.onAccept() }
+                    Button(L10n.t(.replaceButton, lang)) { model.onAccept() }
                         .keyboardShortcut(.defaultAction)
                         .buttonStyle(DeAIButtonStyle(compact: true))
-                    Button("复制") {
+                    Button(L10n.t(.copyButton, lang)) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(
                             model.result, forType: .string
                         )
                     }
-                    Button("重试") { model.onRetry() }
+                    Button(L10n.t(.retryButton, lang)) { model.onRetry() }
                     Spacer(minLength: 0)
-                    Button("取消") { model.onCancel() }
+                    Button(L10n.t(.cancelButton, lang)) { model.onCancel() }
                 }
                 .font(DeAIDesign.font(11))
                 .buttonStyle(.plain)
@@ -194,25 +218,25 @@ struct RewritePanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 16) {
                     if model.showOpenSettings {
-                        Button("打开设置") { model.onOpenSettings() }
+                        Button(L10n.t(.openSettings, lang)) { model.onOpenSettings() }
                             .buttonStyle(DeAIButtonStyle(compact: true))
                     }
                     if model.canRetry {
-                        Button("重试") { model.onRetry() }
+                        Button(L10n.t(.retryButton, lang)) { model.onRetry() }
                     }
                     Spacer(minLength: 0)
-                    Button("取消") { model.onCancel() }
+                    Button(L10n.t(.cancelButton, lang)) { model.onCancel() }
                 }
                 .font(DeAIDesign.font(11))
                 .buttonStyle(.plain)
                 .foregroundStyle(DeAIDesign.muted)
             case .noChange:
-                Text("没有需要修改的地方")
+                Text(L10n.t(.noChange, lang))
                     .font(DeAIDesign.font(12))
                     .foregroundStyle(DeAIDesign.muted)
                 HStack {
                     Spacer()
-                    Button("关闭") { model.onCancel() }
+                    Button(L10n.t(.closeTooltip, lang)) { model.onCancel() }
                         .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                 }
             }
@@ -227,7 +251,85 @@ struct RewritePanelView: View {
         }
         .foregroundStyle(DeAIDesign.text)
         .font(DeAIDesign.font())
+        // child controls (DeAIToggleStyle etc.) read the env — the hosting
+        // NSView was created once, so the language is pushed via the model
+        .environment(\.deaiUILanguage, lang)
         .onExitCommand { model.onCancel() }
+    }
+
+    /// 记住改法: expands to the word-level changed pairs as checkboxes;
+    /// 加入词库 stores the checked ones as replace lexicon entries.
+    private var rememberBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(DeAIDesign.motion(false)) {
+                    model.rememberExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(
+                        systemName: model.rememberExpanded
+                            ? "chevron.down" : "chevron.right"
+                    )
+                    .font(DeAIDesign.font(9, weight: .semibold))
+                    Text(
+                        model.rememberSaved
+                            ? L10n.t(.rememberSaved, lang)
+                            : L10n.f(.rememberToggle, lang, model.rememberPairs.count)
+                    )
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(DeAIDesign.muted)
+            .font(DeAIDesign.font(11))
+            .accessibilityLabel(L10n.t(.rememberA11y, lang))
+
+            if model.rememberExpanded && !model.rememberSaved {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.rememberPairs.indices, id: \.self) { i in
+                        let pair = model.rememberPairs[i]
+                        Toggle(
+                            isOn: Binding(
+                                get: { model.rememberChecked.contains(i) },
+                                set: { on in
+                                    if on {
+                                        model.rememberChecked.insert(i)
+                                    } else {
+                                        model.rememberChecked.remove(i)
+                                    }
+                                }
+                            )
+                        ) {
+                            Text(
+                                pair.to.isEmpty
+                                    ? L10n.f(.pairDelete, lang, pair.from)
+                                    : L10n.f(.pairReplace, lang, pair.from, pair.to)
+                            )
+                            .font(DeAIDesign.font(11))
+                        }
+                        .toggleStyle(DeAIToggleStyle())
+                    }
+                    HStack {
+                        Spacer()
+                        Button(L10n.t(.addToLexicon, lang)) {
+                            let picked = model.rememberPairs.indices
+                                .filter { model.rememberChecked.contains($0) }
+                                .map { model.rememberPairs[$0] }
+                            guard !picked.isEmpty else { return }
+                            model.onAddLexiconPairs(picked)
+                        }
+                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+                        .disabled(model.rememberChecked.isEmpty)
+                        .opacity(model.rememberChecked.isEmpty ? 0.4 : 1)
+                    }
+                }
+                .padding(10)
+                .background(
+                    DeAIDesign.sidebar,
+                    in: RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                )
+            }
+        }
     }
 
     private func labeled(_ label: String, text: String, muted: Bool) -> some View {

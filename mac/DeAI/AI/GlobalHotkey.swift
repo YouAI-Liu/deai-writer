@@ -24,8 +24,11 @@ struct RewriteHotkey: Codable, Equatable {
     // MARK: - display
 
     /// ⌃⌥⇧⌘ glyphs in Apple order, then the key name — e.g. "⌃⌥ R".
-    var label: String {
-        guard let keyCode else { return "未设置" }
+    /// (zh form kept as `label` for tests; UI uses `label(_:)`.)
+    var label: String { label(.zh) }
+
+    func label(_ lang: UILanguage) -> String {
+        guard let keyCode else { return L10n.t(.hotkeyNotSet, lang) }
         let glyphs = Self.modifierGlyphs(modifiers)
         let name = Self.keyName(keyCode)
         return glyphs.isEmpty ? name : "\(glyphs) \(name)"

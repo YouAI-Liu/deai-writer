@@ -3,7 +3,7 @@
 import { strict as assert } from 'node:assert';
 import pkg from '../pkg/deai_wasm.js';
 
-const { Checker, strip_markdown, apply_suggestion } = pkg;
+const { Checker, strip_markdown, apply_suggestion, check_personal, personal_keep_ranges } = pkg;
 const checker = new Checker();
 
 const text = '我们不是工具，而是伙伴。This is an test.';
@@ -72,5 +72,21 @@ const eFindings = checker.check(emojiText, opts);
 const eGrammar = eFindings.find(f => f.category === 'Grammar');
 assert.ok(eGrammar, 'expected a Grammar finding after emoji');
 assert.equal(emojiText.slice(eGrammar.start, eGrammar.end), 'an');
+
+// check_personal: replace/avoid findings at UTF-16 offsets; keep → no finding
+const pText = '说白了，赋能 ACME 保留词';
+const pEntries = [
+  { kind: 'replace', term: '赋能', replacement: '帮助', matchKind: 'exact' },
+  { kind: 'avoid', term: '说白了', matchKind: 'exact' },
+  { kind: 'keep', term: '保留词', matchKind: 'exact' },
+];
+const pf = check_personal(pText, pEntries);
+assert.equal(pf.length, 2, `expected 2 personal findings, got ${pf.length}`);
+assert.equal(pf[0].category, 'Personal');
+assert.equal(pf[0].rule_id, 'personal.avoid');
+assert.equal(pText.slice(pf[1].start, pf[1].end), '赋能');
+assert.equal(pf[1].suggestions[0], '帮助');
+// 保留词 sits at UTF-16 units 12..15 in pText
+assert.deepEqual(personal_keep_ranges(pText, pEntries), [[12, 15]]);
 
 console.log('smoke ok:', JSON.stringify(findings, null, 2));

@@ -25,7 +25,11 @@ enum ProviderPreset: String, Codable, CaseIterable {
     case lmStudio
     case custom
 
-    var label: String {
+    /// zh form — provider names are stored user data and stay untranslated;
+    /// the UI shows `label(_:)` instead.
+    var label: String { label(.zh) }
+
+    func label(_ lang: UILanguage) -> String {
         switch self {
         case .opencodeGo: return "OpenCode Go"
         case .openAI: return "OpenAI"
@@ -34,7 +38,7 @@ enum ProviderPreset: String, Codable, CaseIterable {
         case .gemini: return "Gemini"
         case .ollama: return "Ollama"
         case .lmStudio: return "LM Studio"
-        case .custom: return "自定义"
+        case .custom: return L10n.t(.providerCustom, lang)
         }
     }
 

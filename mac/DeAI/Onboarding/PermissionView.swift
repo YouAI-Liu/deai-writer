@@ -2,17 +2,19 @@ import ApplicationServices
 import SwiftUI
 
 struct PermissionView: View {
+    @Environment(\.deaiUILanguage) private var lang
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 9) {
-                Text("辅助功能权限")
+                Text(L10n.t(.permissionTitle, lang))
                     .font(DeAIDesign.font(21, weight: .semibold)).tracking(-0.5)
-                Text("DeAI 需要读取前台文本，以标出语法、AI 腔和 Markdown 残留；密码等安全输入框会跳过。")
+                Text(L10n.t(.permissionBody, lang))
                     .font(DeAIDesign.font(12)).lineSpacing(3)
                     .foregroundStyle(DeAIDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("在辅助功能列表中勾选 DeAI，授权后此窗口会自动关闭。")
+            Text(L10n.t(.permissionNote, lang))
             .font(DeAIDesign.font(11))
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
@@ -22,7 +24,7 @@ struct PermissionView: View {
                 )
             } label: {
                 HStack {
-                    Text("打开系统设置")
+                    Text(L10n.t(.openSystemSettings, lang))
                     Spacer()
                     Image(systemName: "arrow.up.right").font(DeAIDesign.font(12, weight: .medium))
                 }

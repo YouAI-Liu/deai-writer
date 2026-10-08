@@ -7,6 +7,7 @@ import SwiftUI
 /// recording and consumes .keyDown / .flagsChanged.
 struct ShortcutRecorder: View {
     @Binding var hotkey: RewriteHotkey
+    @Environment(\.deaiUILanguage) private var lang
     /// Recording start/stop — AppController pauses the global hotkey so the
     /// current combo can't fire a rewrite mid-recording.
     var onRecordingChanged: ((Bool) -> Void)?
@@ -57,7 +58,7 @@ struct ShortcutRecorder: View {
                     RewriteHotkey.modifierGlyphs(liveModifiers).map(String.init),
                     id: \.self
                 ) { keycap($0) }
-                Text("请按下快捷键…")
+                Text(L10n.t(.recordPrompt, lang))
                     .lineLimit(1)
                     .fixedSize()
                     .foregroundStyle(DeAIDesign.muted)
@@ -77,10 +78,10 @@ struct ShortcutRecorder: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(DeAIDesign.muted)
-                .help("清除快捷键")
-                .accessibilityLabel("清除快捷键")
+                .help(L10n.t(.clearShortcut, lang))
+                .accessibilityLabel(L10n.t(.clearShortcut, lang))
             } else {
-                Text("点击录制")
+                Text(L10n.t(.clickToRecord, lang))
                     .foregroundStyle(DeAIDesign.muted)
             }
         }
@@ -89,9 +90,9 @@ struct ShortcutRecorder: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .frame(minWidth: 120)
-        .background(DeAIDesign.sidebar, in: Capsule())
+        .background(DeAIDesign.sidebar, in: DeAIDesign.pill)
         .overlay {
-            Capsule().strokeBorder(
+            DeAIDesign.pill.strokeBorder(
                 recording ? DeAIDesign.accent : DeAIDesign.border,
                 lineWidth: recording ? 1 : 0.5
             )
@@ -101,8 +102,8 @@ struct ShortcutRecorder: View {
             if !recording { startRecording() }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("AI 改写快捷键")
-        .accessibilityValue(hotkey.label)
+        .accessibilityLabel(L10n.t(.recorderA11y, lang))
+        .accessibilityValue(hotkey.label(lang))
     }
 
     /// One glyph/key name inside a small keycap — [⌃][⌥][R].
@@ -173,10 +174,10 @@ struct ShortcutRecorder: View {
             stopRecording()
         case .needsModifier:
             liveModifiers = mods
-            error = "需要包含 ⌃、⌥ 或 ⌘"
+            error = L10n.t(.needModifier, lang)
         case .reserved:
             liveModifiers = mods
-            error = "这个组合被系统或常用操作占用"
+            error = L10n.t(.reservedCombo, lang)
         }
         return nil
     }

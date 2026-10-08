@@ -1303,13 +1303,14 @@ fn perf_20k_utf16() {
     println!("  rule sum: {sum:.2} ms ({} rules)", times.len());
     // pipeline overhead: collect + per-category dedupe + sort
     let t = Instant::now();
-    let mut per_cat: [Vec<(usize, Finding)>; 4] = Default::default();
+    let mut per_cat: [Vec<(usize, Finding)>; 5] = Default::default();
     for (i, rule) in crate::rules::all().iter().enumerate() {
         let idx = match rule.category() {
             Category::Grammar => 0,
             Category::AiToneEn => 1,
             Category::AiToneZh => 2,
             Category::Markdown => 3,
+            Category::Personal => 4,
         };
         for f in rule.check(&ctx) {
             per_cat[idx].push((i, f));
@@ -1360,6 +1361,7 @@ fn perf_paragraph_pipeline() {
             ai_tone_en: false,
             ai_tone_zh: false,
             markdown: false,
+            personal: false,
             sensitivity: 3,
         };
 
@@ -1418,6 +1420,7 @@ fn mem_paragraph_lints() {
         ai_tone_en: false,
         ai_tone_zh: false,
         markdown: false,
+        personal: false,
         sensitivity: 3,
     };
     for i in 0..100 {
@@ -1467,4 +1470,114 @@ fn bench_lintgroup_rebuild() {
         t.elapsed().as_secs_f64() * 1000.0
     );
     let _ = Document::new_curated("warm", &PlainEnglish);
+}
+
+mod personal {
+    use crate::{check_personal, personal_keep_ranges, Category, PersonalEntry,
+        PersonalKind::*, PersonalMatch::*};
+
+    fn e(kind: crate::PersonalKind, term: &str, repl: Option<&str>,
+         m: crate::PersonalMatch) -> PersonalEntry {
+        PersonalEntry {
+            kind, term: term.to_string(),
+            replacement: repl.map(str::to_string), match_kind: m,
+        }
+    }
+
+    fn utf16_slice(text: &str, s: u32, e: u32) -> String {
+        let mut taken = 0u32;
+        let mut out = String::new();
+        for c in text.chars() {
+            let w = c.len_utf16() as u32;
+            if taken >= s && taken + w <= e { out.push(c); }
+            taken += w;
+        }
+        out
+    }
+
+    #[test]
+    fn replace_and_avoid_findings() {
+        let entries = [
+            e(Replace, "赋能", Some("帮助"), Exact),
+            e(Avoid, "说白了", None, Exact),
+            e(Keep, "保留词", None, Exact),
+        ];
+        let fs = check_personal("说白了，赋能要保留词", &entries);
+        assert_eq!(fs.len(), 2);
+        assert_eq!(fs[0].rule_id, "personal.avoid");
+        assert_eq!(fs[0].category, Category::Personal);
+        assert_eq!(fs[0].suggestions.len(), 0);
+        assert_eq!(fs[0].tier, 1);
+        assert_eq!(utf16_slice("说白了，赋能要保留词", fs[0].start, fs[0].end), "说白了");
+        assert_eq!(fs[1].rule_id, "personal.replace");
+        assert_eq!(fs[1].suggestions, vec!["帮助".to_string()]);
+        assert_eq!(utf16_slice("说白了，赋能要保留词", fs[1].start, fs[1].end), "赋能");
+        assert_eq!(fs[1].message, "个人偏好：用「帮助」代替「赋能」");
+        // keep produces no finding
+        assert!(fs.iter().all(|f| f.start != 7));
+        // but its range is reported for suppression
+        assert_eq!(personal_keep_ranges("说白了，赋能要保留词", &entries), vec![(7, 10)]);
+    }
+
+    #[test]
+    fn emoji_offsets_are_utf16() {
+        let entries = [e(Avoid, "word", None, Exact)];
+        let fs = check_personal("😀😀 word!", &entries);
+        assert_eq!(fs.len(), 1);
+        // two surrogate pairs (4 units) + space → word starts at 5
+        assert_eq!((fs[0].start, fs[0].end), (5, 9));
+        assert_eq!(utf16_slice("😀😀 word!", fs[0].start, fs[0].end), "word");
+    }
+
+    #[test]
+    fn whole_word_boundaries() {
+        let entries = [e(Avoid, "cat", None, WholeWord)];
+        // "cat" inside "concatenate" must not match; standalone does
+        let fs = check_personal("concatenate cat cat5 a cat.", &entries);
+        assert_eq!(fs.len(), 2);
+        assert_eq!(utf16_slice("concatenate cat cat5 a cat.", fs[0].start, fs[0].end), "cat");
+        assert_eq!(utf16_slice("concatenate cat cat5 a cat.", fs[1].start, fs[1].end), "cat");
+        // CJK term: boundaries can't apply → behaves like exact
+        let zh = [e(Avoid, "赋能", None, WholeWord)];
+        let fs = check_personal("深度赋能业务", &zh);
+        assert_eq!(fs.len(), 1);
+    }
+
+    #[test]
+    fn case_insensitive_keeps_offsets() {
+        let entries = [e(Replace, "acme", Some("Acme Corp"), CaseInsensitive)];
+        let fs = check_personal("Meet ACME at Acme.", &entries);
+        assert_eq!(fs.len(), 2);
+        assert_eq!(utf16_slice("Meet ACME at Acme.", fs[0].start, fs[0].end), "ACME");
+        assert_eq!(utf16_slice("Meet ACME at Acme.", fs[1].start, fs[1].end), "Acme");
+    }
+
+    #[test]
+    fn overlap_longer_term_wins() {
+        // "人民币" is longer than "人民" — it wins the overlap regardless of
+        // entry order
+        let entries = [
+            e(Avoid, "人民", None, Exact),
+            e(Avoid, "人民币", None, Exact),
+        ];
+        let fs = check_personal("人民币和人民", &entries);
+        assert_eq!(fs.len(), 2);
+        assert_eq!(utf16_slice("人民币和人民", fs[0].start, fs[0].end), "人民币");
+        assert_eq!(utf16_slice("人民币和人民", fs[1].start, fs[1].end), "人民");
+        // equal length → earlier entry wins
+        let tied = [
+            e(Avoid, "赋能", None, Exact),
+            e(Replace, "赋能", Some("帮助"), Exact),
+        ];
+        let fs = check_personal("赋能", &tied);
+        assert_eq!(fs.len(), 1);
+        assert_eq!(fs[0].rule_id, "personal.avoid");
+    }
+
+    #[test]
+    fn empty_and_missing_terms() {
+        let entries = [e(Avoid, "", None, Exact)];
+        assert!(check_personal("text", &entries).is_empty());
+        assert!(check_personal("text", &[]).is_empty());
+    }
 }

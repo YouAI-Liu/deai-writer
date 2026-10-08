@@ -9,11 +9,15 @@
 /* Begin PBXBuildFile section */
 		04FC1A24F0A7EC402891F4B0 /* SuggestionCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6952B98BE2FD14A7B75F4816 /* SuggestionCardView.swift */; };
 		05E2FF0FDABA015B135EBC48 /* UnderlineAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */; };
+		153F8C96B8C132ACD17285E0 /* LexiconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0C3DA6C507335404AA2F36 /* LexiconTests.swift */; };
+		19F892F42AB326FE1F98D352 /* PersonalLexicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4A478C25A74C2AA46EF948C /* PersonalLexicon.swift */; };
 		1A62F65F2E026359AEE01AE8 /* DeAICore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4F224A9F7156E04BC16B873 /* DeAICore.xcframework */; };
 		1E409E04070FB33A8F651F12 /* SuggestionCardPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66254E52FD4AA98A00E50DD1 /* SuggestionCardPanel.swift */; };
+		26EFE8A97BF8A5A9D1F0D2D6 /* L10nTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3104BB82BCB2D5F4480F037B /* L10nTests.swift */; };
 		2B1090B072A5B946C7384D12 /* DeAITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B216B51B51310036CFF604E3 /* DeAITests.swift */; };
 		308E19CC89796BB300B2C556 /* RewritePrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B9C9EF2586A11E29ED59129 /* RewritePrompt.swift */; };
 		32B0AC02D15B21E845D9BC70 /* AppGroups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2248647D78AC1699CFB9EDB1 /* AppGroups.swift */; };
+		372966ECE3BA1B9A57B7064B /* RewriteDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF72C14B30E18A2FAD497226 /* RewriteDiff.swift */; };
 		4537DF9DC77FBF1B1CD17BA5 /* AXElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = B997158921FEFFBDF3690B66 /* AXElement.swift */; };
 		48679957256D942F83327749 /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AEA87ABCFDC937676EE5CD /* AppController.swift */; };
 		4A9657312A94751AAFA91D32 /* SecretStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6ECCCBC189810D839BBBBDB /* SecretStore.swift */; };
@@ -36,8 +40,10 @@
 		CC0A949819225BC6F704BBF8 /* DeAICore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1A2A9F49D4FC638F50FB12 /* DeAICore.swift */; };
 		D8DC8633CAC8170AACB37EC1 /* DeAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0EB397B06D565322CAB57D /* DeAIApp.swift */; };
 		D9B40DB6DA15B2AF953236A6 /* FocusTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9B656910EE1ECB8B4F7574 /* FocusTracker.swift */; };
+		DEA29F5A6EFFBF3B7B75E63D /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = F94F0CFB94E4724B878B4CB9 /* L10n.swift */; };
 		E31B1FF09123BFAF6611C6F2 /* ShortcutRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F5A0FD0012C0C98AAA740DA /* ShortcutRecorder.swift */; };
 		E771A18EABF2CB2396DEE1D4 /* RewritePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C5891B17763F9E5DDE37C3 /* RewritePanel.swift */; };
+		EB5D8F9C032E783C4CBF8280 /* DeAITooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494D25B95F90A33C89A3C22 /* DeAITooltip.swift */; };
 		EF793542DDE1494985A2A042 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A160E60D2C7FDD627F0103 /* ContentView.swift */; };
 		F1872113783568B9CE26B68E /* ParagraphGrammarCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CCC5C88F697ADBCC98A01AC /* ParagraphGrammarCache.swift */; };
 		FE60E33402ACCDA506FF8595 /* PermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7DE3B50753C53D6332149B /* PermissionView.swift */; };
@@ -58,6 +64,7 @@
 		13D91D9F8711BE93EE3B772F /* Config-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Config-Debug.xcconfig"; sourceTree = "<group>"; };
 		1E1835E82BEF929FBAA4FFC0 /* LLMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMClient.swift; sourceTree = "<group>"; };
 		2248647D78AC1699CFB9EDB1 /* AppGroups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroups.swift; sourceTree = "<group>"; };
+		3104BB82BCB2D5F4480F037B /* L10nTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10nTests.swift; sourceTree = "<group>"; };
 		35D5A0052CE6F411AC885598 /* CheckService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckService.swift; sourceTree = "<group>"; };
 		3B9C9EF2586A11E29ED59129 /* RewritePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewritePrompt.swift; sourceTree = "<group>"; };
 		4712B5A62B8F80DFDC3368E2 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -71,7 +78,9 @@
 		694283D53AC8F23B940F5360 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		6952B98BE2FD14A7B75F4816 /* SuggestionCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCardView.swift; sourceTree = "<group>"; };
 		69E6AB48EB77ACE0AA612718 /* DeAICoreFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DeAICoreFFI.h; sourceTree = "<group>"; };
+		7494D25B95F90A33C89A3C22 /* DeAITooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAITooltip.swift; sourceTree = "<group>"; };
 		77AC0F3149356B34758A1540 /* TextGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextGeometry.swift; sourceTree = "<group>"; };
+		7A0C3DA6C507335404AA2F36 /* LexiconTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexiconTests.swift; sourceTree = "<group>"; };
 		7D3B9A4C6E1611917FAAF08D /* ProviderConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderConfig.swift; sourceTree = "<group>"; };
 		7E7DE3B50753C53D6332149B /* PermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionView.swift; sourceTree = "<group>"; };
 		880F92DF93466ED427FE9D36 /* DeAIDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAIDesign.swift; sourceTree = "<group>"; };
@@ -82,9 +91,11 @@
 		AC0EB397B06D565322CAB57D /* DeAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAIApp.swift; sourceTree = "<group>"; };
 		B216B51B51310036CFF604E3 /* DeAITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAITests.swift; sourceTree = "<group>"; };
 		B4640EE3032368D58BF69F4B /* GlobalHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotkey.swift; sourceTree = "<group>"; };
+		B4A478C25A74C2AA46EF948C /* PersonalLexicon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalLexicon.swift; sourceTree = "<group>"; };
 		B4F224A9F7156E04BC16B873 /* DeAICore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = DeAICore.xcframework; path = ../core/build/DeAICore.xcframework; sourceTree = "<group>"; };
 		B997158921FEFFBDF3690B66 /* AXElement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXElement.swift; sourceTree = "<group>"; };
 		BC8A2EF7F8118937C86B67CA /* TextTargetResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextTargetResolver.swift; sourceTree = "<group>"; };
+		BF72C14B30E18A2FAD497226 /* RewriteDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteDiff.swift; sourceTree = "<group>"; };
 		C979DF2A6F066C5067F3BD14 /* DeAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC1A2A9F49D4FC638F50FB12 /* DeAICore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeAICore.swift; sourceTree = "<group>"; };
 		CC6C5930CBA4ACFE284B81B1 /* ClickMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickMonitor.swift; sourceTree = "<group>"; };
@@ -94,6 +105,7 @@
 		E5B1A3B3DD7FCE00F958A250 /* RewriteScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteScope.swift; sourceTree = "<group>"; };
 		E919F1992B8CD9860E6B4C9C /* Config-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Config-Release.xcconfig"; sourceTree = "<group>"; };
 		EEC94C6D7E9990F20CB3AAE5 /* TextReplacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextReplacer.swift; sourceTree = "<group>"; };
+		F94F0CFB94E4724B878B4CB9 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -126,6 +138,7 @@
 				B4640EE3032368D58BF69F4B /* GlobalHotkey.swift */,
 				1E1835E82BEF929FBAA4FFC0 /* LLMClient.swift */,
 				7D3B9A4C6E1611917FAAF08D /* ProviderConfig.swift */,
+				BF72C14B30E18A2FAD497226 /* RewriteDiff.swift */,
 				3B9C9EF2586A11E29ED59129 /* RewritePrompt.swift */,
 				E5B1A3B3DD7FCE00F958A250 /* RewriteScope.swift */,
 				D6ECCCBC189810D839BBBBDB /* SecretStore.swift */,
@@ -193,6 +206,7 @@
 			isa = PBXGroup;
 			children = (
 				880F92DF93466ED427FE9D36 /* DeAIDesign.swift */,
+				7494D25B95F90A33C89A3C22 /* DeAITooltip.swift */,
 				620319D7F40972C2D12D6898 /* DebugUIShowcase.swift */,
 			);
 			path = Design;
@@ -202,6 +216,8 @@
 			isa = PBXGroup;
 			children = (
 				B216B51B51310036CFF604E3 /* DeAITests.swift */,
+				3104BB82BCB2D5F4480F037B /* L10nTests.swift */,
+				7A0C3DA6C507335404AA2F36 /* LexiconTests.swift */,
 				E4C56870533B0A422F5A4478 /* RewriteTests.swift */,
 			);
 			path = DeAITests;
@@ -211,6 +227,7 @@
 			isa = PBXGroup;
 			children = (
 				A7A160E60D2C7FDD627F0103 /* ContentView.swift */,
+				F94F0CFB94E4724B878B4CB9 /* L10n.swift */,
 				221A27F8F311E94F2E737509 /* AI */,
 				40366506EBEFAAE92BBE3814 /* App */,
 				0FECD8FF92624C061BF29292 /* AX */,
@@ -261,6 +278,7 @@
 			children = (
 				2248647D78AC1699CFB9EDB1 /* AppGroups.swift */,
 				4712B5A62B8F80DFDC3368E2 /* AppSettings.swift */,
+				B4A478C25A74C2AA46EF948C /* PersonalLexicon.swift */,
 				694283D53AC8F23B940F5360 /* SettingsView.swift */,
 				8F5A0FD0012C0C98AAA740DA /* ShortcutRecorder.swift */,
 				657F188CF98FB6C0F7094C9C /* UnderlineAppearance.swift */,
@@ -356,14 +374,18 @@
 				D8DC8633CAC8170AACB37EC1 /* DeAIApp.swift in Sources */,
 				CC0A949819225BC6F704BBF8 /* DeAICore.swift in Sources */,
 				857FF9ACF5EEDDCEEC34BDA9 /* DeAIDesign.swift in Sources */,
+				EB5D8F9C032E783C4CBF8280 /* DeAITooltip.swift in Sources */,
 				5A3E6555CDB2F323817556A4 /* DebugUIShowcase.swift in Sources */,
 				D9B40DB6DA15B2AF953236A6 /* FocusTracker.swift in Sources */,
 				B28C2B3C7F046EB1D254A18F /* GlobalHotkey.swift in Sources */,
+				DEA29F5A6EFFBF3B7B75E63D /* L10n.swift in Sources */,
 				4E70BC20826B2F0A6B330818 /* LLMClient.swift in Sources */,
 				AD66C67B1B110273B18198E5 /* OverlayWindow.swift in Sources */,
 				F1872113783568B9CE26B68E /* ParagraphGrammarCache.swift in Sources */,
 				FE60E33402ACCDA506FF8595 /* PermissionView.swift in Sources */,
+				19F892F42AB326FE1F98D352 /* PersonalLexicon.swift in Sources */,
 				4A9D11D9225870C9F9FC649D /* ProviderConfig.swift in Sources */,
+				372966ECE3BA1B9A57B7064B /* RewriteDiff.swift in Sources */,
 				E771A18EABF2CB2396DEE1D4 /* RewritePanel.swift in Sources */,
 				308E19CC89796BB300B2C556 /* RewritePrompt.swift in Sources */,
 				53AC67001400AA38D6544BE9 /* RewriteScope.swift in Sources */,
@@ -385,6 +407,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B1090B072A5B946C7384D12 /* DeAITests.swift in Sources */,
+				26EFE8A97BF8A5A9D1F0D2D6 /* L10nTests.swift in Sources */,
+				153F8C96B8C132ACD17285E0 /* LexiconTests.swift in Sources */,
 				B96C36BB6CE722A8E5542AC7 /* RewriteTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -15,6 +15,7 @@ final class DeAITests: XCTestCase {
         aiToneEn: Bool = true,
         aiToneZh: Bool = true,
         markdown: Bool = true,
+        personal: Bool = true,
         sensitivity: UInt8 = 2
     ) -> CheckOptions {
         CheckOptions(
@@ -22,6 +23,7 @@ final class DeAITests: XCTestCase {
             aiToneEn: aiToneEn,
             aiToneZh: aiToneZh,
             markdown: markdown,
+            personal: personal,
             sensitivity: sensitivity
         )
     }
@@ -1655,5 +1657,153 @@ final class KeyActionTests: XCTestCase {
     func testNonEmptyDraftSavesTrimmed() {
         XCTAssertEqual(KeyAction(draft: "sk-abc"), .save("sk-abc"))
         XCTAssertEqual(KeyAction(draft: "  sk-abc \n"), .save("sk-abc"))
+    }
+}
+
+final class SelectionSessionLogicTests: XCTestCase {
+    private func f(_ s: UInt32, _ e: UInt32) -> Finding {
+        Finding(
+            category: .grammar, ruleId: "test", message: "",
+            start: s, end: e, suggestions: [], tier: 1
+        )
+    }
+
+    // MARK: scope filtering
+
+    func testScopedKeepsOnlyFullyContainedFindings() {
+        let all = [f(0, 3), f(5, 8), f(8, 12), f(20, 22), f(4, 10)]
+        // scope [5, 12)
+        let out = SelectionSessionLogic.scoped(all, scopeStart: 5, scopeEnd: 12)
+        XCTAssertEqual(out.map(\.start), [5, 8])
+        // partial overlap (4,10) starts before the scope — excluded
+        XCTAssertFalse(out.contains { $0.start == 4 })
+        // touching boundaries count as inside
+        XCTAssertEqual(
+            SelectionSessionLogic.scoped(
+                all, scopeStart: 0, scopeEnd: 3
+            ).map(\.start),
+            [0]
+        )
+        // nothing inside
+        XCTAssertTrue(
+            SelectionSessionLogic.scoped(
+                all, scopeStart: 13, scopeEnd: 19
+            ).isEmpty
+        )
+    }
+
+    // MARK: scope tracking across replacements
+
+    func testAdjustedScopeEnd() {
+        // grow: "go" → "goes" (+2)
+        XCTAssertEqual(
+            SelectionSessionLogic.adjustedScopeEnd(
+                20, matchedLength: 2, replacementLength: 4
+            ),
+            22
+        )
+        // shrink: "utilize" → "use"
+        XCTAssertEqual(
+            SelectionSessionLogic.adjustedScopeEnd(
+                20, matchedLength: 7, replacementLength: 3
+            ),
+            16
+        )
+        // deletion: matched 4, replacement 0
+        XCTAssertEqual(
+            SelectionSessionLogic.adjustedScopeEnd(
+                20, matchedLength: 4, replacementLength: 0
+            ),
+            16
+        )
+        // same length → unchanged
+        XCTAssertEqual(
+            SelectionSessionLogic.adjustedScopeEnd(
+                20, matchedLength: 3, replacementLength: 3
+            ),
+            20
+        )
+    }
+
+    // MARK: next-index after removal
+
+    func testNextIndexAfterRemoval() {
+        // removed item 0 of 3 → next is the new item 0
+        XCTAssertEqual(SelectionSessionLogic.nextIndex(current: 0, remaining: 2), 0)
+        // removed middle of 3 → same index = the old next
+        XCTAssertEqual(SelectionSessionLogic.nextIndex(current: 1, remaining: 2), 1)
+        // removed last → clamp to the new last
+        XCTAssertEqual(SelectionSessionLogic.nextIndex(current: 2, remaining: 2), 1)
+        // nothing remains → session over
+        XCTAssertNil(SelectionSessionLogic.nextIndex(current: 0, remaining: 0))
+    }
+}
+
+final class ExplicitCheckFilterTests: XCTestCase {
+    private func settings() -> AppSettings {
+        AppSettings(userDefaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    }
+
+    private func f(_ s: UInt32, _ e: UInt32, rule: String = "r") -> Finding {
+        Finding(
+            category: .markdown, ruleId: rule, message: "",
+            start: s, end: e, suggestions: [], tier: 1
+        )
+    }
+
+    /// The app/group *enabled* flag is not part of FindingFilter — an
+    /// explicit selection check on a group-disabled app still yields
+    /// findings, while chips/disabled rules/session ignores still apply.
+    func testDisabledGroupStillFiltersChipsNotEnabled() {
+        let s = settings()
+        let text = "**a** and **b**"
+        // .notes group is enabled by default — findings pass
+        XCTAssertFalse(
+            FindingFilter.apply(
+                [f(0, 4), f(9, 13)], text: text,
+                settings: s, bundleId: "com.apple.TextEdit"
+            ).isEmpty
+        )
+        // remove the markdown chip from the notes group → filtered out even
+        // though nothing checks group.enabled here
+        var notes = s.groupRules[.notes]!
+        notes.checks.remove(.markdown)
+        s.groupRules[.notes] = notes
+        XCTAssertTrue(
+            FindingFilter.apply(
+                [f(0, 4)], text: text,
+                settings: s, bundleId: "com.apple.TextEdit"
+            ).isEmpty
+        )
+        // a group that is entirely disabled (browser) still yields findings
+        // through the explicit path — enabled is gated by tracking, not here
+        XCTAssertFalse(
+            FindingFilter.apply(
+                [f(0, 4)], text: text,
+                settings: s, bundleId: "com.google.Chrome"
+            ).isEmpty
+        )
+    }
+
+    func testDisabledRuleAndSessionIgnoreApply() {
+        let s = settings()
+        s.disabledRuleIds.insert("r")
+        XCTAssertTrue(
+            FindingFilter.apply(
+                [f(0, 4)], text: "**a**",
+                settings: s, bundleId: "com.apple.TextEdit"
+            ).isEmpty
+        )
+        // "**a**" is 5 UTF-16 units — cover all of it so matched == "**a**"
+        let s2 = settings()
+        s2.sessionIgnored.insert(
+            AppSettings.IgnoreKey(ruleId: "r", text: "**a**")
+        )
+        XCTAssertTrue(
+            FindingFilter.apply(
+                [f(0, 5)], text: "**a**",
+                settings: s2, bundleId: "com.apple.TextEdit"
+            ).isEmpty
+        )
     }
 }

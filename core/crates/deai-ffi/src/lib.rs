@@ -6,6 +6,7 @@ pub enum Category {
     AiToneEn,
     AiToneZh,
     Markdown,
+    Personal,
 }
 
 #[derive(uniffi::Record)]
@@ -29,6 +30,8 @@ pub struct CheckOptions {
     pub ai_tone_en: bool,
     pub ai_tone_zh: bool,
     pub markdown: bool,
+    /// Personal-lexicon check toggle (findings come from `check_personal`).
+    pub personal: bool,
     /// 1..=3; findings with `tier <= sensitivity` are returned.
     pub sensitivity: u8,
 }
@@ -40,6 +43,7 @@ impl From<CheckOptions> for deai_core::CheckOptions {
             ai_tone_en: o.ai_tone_en,
             ai_tone_zh: o.ai_tone_zh,
             markdown: o.markdown,
+            personal: o.personal,
             sensitivity: o.sensitivity,
         }
     }
@@ -53,6 +57,7 @@ impl From<deai_core::Finding> for Finding {
                 deai_core::Category::AiToneEn => Category::AiToneEn,
                 deai_core::Category::AiToneZh => Category::AiToneZh,
                 deai_core::Category::Markdown => Category::Markdown,
+                deai_core::Category::Personal => Category::Personal,
             },
             rule_id: f.rule_id,
             message: f.message,
@@ -103,4 +108,80 @@ pub fn strip_markdown(text: String, opts: CheckOptions) -> String {
 #[uniffi::export]
 pub fn apply_suggestion(text: String, start: u32, end: u32, replacement: String) -> String {
     deai_core::apply_suggestion(&text, start, end, &replacement)
+}
+
+#[derive(uniffi::Enum)]
+pub enum PersonalKind {
+    Replace,
+    Avoid,
+    Keep,
+}
+
+#[derive(uniffi::Enum)]
+pub enum PersonalMatch {
+    Exact,
+    CaseInsensitive,
+    WholeWord,
+}
+
+/// One personal-lexicon entry as the core matcher sees it (id/note live in
+/// the Swift model, not across FFI).
+#[derive(uniffi::Record)]
+pub struct PersonalEntry {
+    pub kind: PersonalKind,
+    pub term: String,
+    pub replacement: Option<String>,
+    pub match_kind: PersonalMatch,
+}
+
+impl From<PersonalEntry> for deai_core::PersonalEntry {
+    fn from(e: PersonalEntry) -> Self {
+        deai_core::PersonalEntry {
+            kind: match e.kind {
+                PersonalKind::Replace => deai_core::PersonalKind::Replace,
+                PersonalKind::Avoid => deai_core::PersonalKind::Avoid,
+                PersonalKind::Keep => deai_core::PersonalKind::Keep,
+            },
+            term: e.term,
+            replacement: e.replacement,
+            match_kind: match e.match_kind {
+                PersonalMatch::Exact => deai_core::PersonalMatch::Exact,
+                PersonalMatch::CaseInsensitive => {
+                    deai_core::PersonalMatch::CaseInsensitive
+                }
+                PersonalMatch::WholeWord => deai_core::PersonalMatch::WholeWord,
+            },
+        }
+    }
+}
+
+/// A UTF-16 span covered by a `keep` entry.
+#[derive(uniffi::Record)]
+pub struct PersonalRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+/// Personal-lexicon findings for `text` (replace/avoid entries; keep entries
+/// never produce findings).
+#[uniffi::export]
+pub fn check_personal(text: String, entries: Vec<PersonalEntry>) -> Vec<Finding> {
+    let entries: Vec<deai_core::PersonalEntry> =
+        entries.into_iter().map(Into::into).collect();
+    deai_core::check_personal(&text, &entries)
+        .into_iter()
+        .map(Finding::from)
+        .collect()
+}
+
+/// UTF-16 ranges covered by `keep` entries, for Swift-side suppression of
+/// other-category findings.
+#[uniffi::export]
+pub fn personal_keep_ranges(text: String, entries: Vec<PersonalEntry>) -> Vec<PersonalRange> {
+    let entries: Vec<deai_core::PersonalEntry> =
+        entries.into_iter().map(Into::into).collect();
+    deai_core::personal_keep_ranges(&text, &entries)
+        .into_iter()
+        .map(|(start, end)| PersonalRange { start, end })
+        .collect()
 }

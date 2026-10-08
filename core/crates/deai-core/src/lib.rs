@@ -1,7 +1,13 @@
 pub mod offsets;
+pub mod personal;
 mod rules;
 mod text;
 pub mod utf16;
+
+pub use personal::{
+    check_personal, keep_ranges as personal_keep_ranges, PersonalEntry,
+    PersonalKind, PersonalMatch,
+};
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -22,6 +28,9 @@ pub enum Category {
     AiToneEn,
     AiToneZh,
     Markdown,
+    /// User-authored lexicon entries (`check_personal` — not produced by
+    /// `Checker::check`).
+    Personal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +55,9 @@ pub struct CheckOptions {
     pub ai_tone_en: bool,
     pub ai_tone_zh: bool,
     pub markdown: bool,
+    /// Personal-lexicon check (the findings come from `check_personal`,
+    /// which is gated on this flag at the call site).
+    pub personal: bool,
     /// 1..=3; findings with `tier <= sensitivity` are returned.
     pub sensitivity: u8,
 }
@@ -57,6 +69,7 @@ impl Default for CheckOptions {
             ai_tone_en: true,
             ai_tone_zh: true,
             markdown: true,
+            personal: true,
             sensitivity: 2,
         }
     }
@@ -69,6 +82,7 @@ impl CheckOptions {
             Category::AiToneEn => self.ai_tone_en,
             Category::AiToneZh => self.ai_tone_zh,
             Category::Markdown => self.markdown,
+            Category::Personal => self.personal,
         }
     }
 
@@ -244,6 +258,7 @@ impl Checker {
             ai_tone_en: true,
             ai_tone_zh: true,
             markdown: true,
+            personal: true,
             sensitivity: 3,
         };
         let _ = checker.check("warmup，test **x** # h", &warm);
@@ -257,12 +272,13 @@ impl Checker {
         let ctx = make_ctx(text, &map, &lines, &exclusions);
 
         // gather per-category, tagged with rule order
-        let mut per_cat: [Vec<(usize, Finding)>; 4] = Default::default();
+        let mut per_cat: [Vec<(usize, Finding)>; 5] = Default::default();
         let idx = |c: Category| match c {
             Category::Grammar => 0,
             Category::AiToneEn => 1,
             Category::AiToneZh => 2,
             Category::Markdown => 3,
+            Category::Personal => 4,
         };
 
         for (i, rule) in self.rules.iter().enumerate() {

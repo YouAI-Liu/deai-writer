@@ -72,6 +72,7 @@ struct CoreGrammarChecker: GrammarChecker {
                 aiToneEn: false,
                 aiToneZh: false,
                 markdown: false,
+                personal: false,
                 sensitivity: 3
             )
         )

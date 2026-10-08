@@ -96,6 +96,7 @@ struct DebugUIShowcase: View {
 /// disabled app group (the `isEnabled` path of DeAIChipToggleStyle).
 private struct DebugChipRows: View {
     var disabled = false
+    @Environment(\.deaiUILanguage) private var lang
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -104,13 +105,13 @@ private struct DebugChipRows: View {
                 .foregroundStyle(DeAIDesign.muted)
             HStack(spacing: 8) {
                 ForEach(CheckKind.allCases, id: \.self) { kind in
-                    Toggle(kind.shortName, isOn: .constant(true))
+                    Toggle(kind.shortName(lang), isOn: .constant(true))
                         .toggleStyle(DeAIChipToggleStyle())
                 }
             }
             HStack(spacing: 8) {
                 ForEach(CheckKind.allCases, id: \.self) { kind in
-                    Toggle(kind.shortName, isOn: .constant(false))
+                    Toggle(kind.shortName(lang), isOn: .constant(false))
                         .toggleStyle(DeAIChipToggleStyle())
                 }
             }
@@ -123,7 +124,8 @@ private struct DebugChipRows: View {
 private struct DebugUnderlineColors: View {
     private let samples: [(Category, String)] = [
         (.grammar, "语法"), (.aiToneZh, "中文 AI 腔"),
-        (.aiToneEn, "英文 AI 腔"), (.markdown, "Markdown")
+        (.aiToneEn, "英文 AI 腔"), (.markdown, "Markdown"),
+        (.personal, "个人偏好")
     ]
 
     var body: some View {
@@ -236,6 +238,7 @@ final class DebugUICapture {
     }
 
     private func save(_ name: String, after delay: Double = 0.6) async throws {
+        FileHandle.standardError.write(Data("CAP save \(name)\n".utf8))
         try await Task.sleep(for: .seconds(delay))
         guard let view = window.contentView,
               let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
@@ -250,11 +253,15 @@ final class DebugUICapture {
     }
 
     /// Stage for the rewrite panel — the view adapts to the stage's
-    /// colorScheme environment like the card.
-    private func rewriteStage(_ model: RewritePanelModel, dark: Bool = false) -> some View {
+    /// colorScheme environment like the card. The real panel refits to
+    /// content; the fixed stage must be tall enough or the result-phase
+    /// ScrollViews collapse to zero (expanded 记住改法 needs ~560).
+    private func rewriteStage(
+        _ model: RewritePanelModel, dark: Bool = false, height: CGFloat = 420
+    ) -> some View {
         RewritePanelView(model: model)
             .padding(60)
-            .frame(width: 620, height: 420)
+            .frame(width: 620, height: height)
             .background(DeAIDesign.background)
     }
 
@@ -338,6 +345,8 @@ final class DebugUICapture {
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
                  size: NSSize(width: 560, height: 660))
             try await save("settings")
+            // same zh Check tab, named for the language-row regression check
+            try await save("settings-check")
             scrollToBottom(in: window.contentView)
             try await save("settings-rules")
             // 应用类型 section mid-scroll: the browser group is disabled by
@@ -358,6 +367,37 @@ final class DebugUICapture {
                               initialTab: 2, hotkeyRecordingPreview: true),
                  size: NSSize(width: 560, height: 660))
             try await save("settings-ai-recording")
+            // 个人 tab with sample entries — a temp-dir store so the real
+            // ~/Library/Application Support/DeAI files stay untouched
+            let captureLexicon = PersonalLexiconStore(
+                directory: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("deai-capture-lexicon",
+                                            isDirectory: true)
+            )
+            _ = captureLexicon.addEntry(
+                kind: .replace, term: "赋能", replacement: "帮助"
+            )
+            _ = captureLexicon.addEntry(kind: .avoid, term: "说白了")
+            _ = captureLexicon.addEntry(kind: .keep, term: "保留词")
+            _ = captureLexicon.addEntry(
+                kind: .replace, term: "delve", replacement: "dig into",
+                match: .caseInsensitive
+            )
+            _ = captureLexicon.addEntry(
+                kind: .avoid, term: "tapestry", match: .wholeWord
+            )
+            let captureSettings = AppSettings(
+                userDefaults: UserDefaults(suiteName: "deai.capture-personal")!,
+                secrets: InMemorySecretStore(),
+                lexicon: captureLexicon
+            )
+            // pin zh — a fresh suite would follow the machine's locale
+            captureSettings.uiLanguage = .zh
+            show(SettingsView(settings: captureSettings, initialTab: 3),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-personal")
+            scrollToBottom(in: window.contentView)
+            try await save("settings-personal-style")
             // rewrite panel states (mock model — same view the panel hosts)
             let rewriteModel = RewritePanelModel()
             rewriteModel.phase = .loading
@@ -367,6 +407,19 @@ final class DebugUICapture {
             rewriteModel.phase = .result
             rewriteModel.result = "这一段开头直接说重点。"
             try await save("rewrite-result")
+            // 记住改法 expanded: checkbox list of word-level changed pairs
+            rewriteModel.rememberPairs = RewriteDiff.wordPairs(
+                original: rewriteModel.original,
+                result: rewriteModel.result
+            )
+            rewriteModel.rememberChecked = Set(rewriteModel.rememberPairs.indices)
+            rewriteModel.rememberExpanded = true
+            show(rewriteStage(rewriteModel, height: 560),
+                 size: NSSize(width: 620, height: 560))
+            try await save("rewrite-remember")
+            rewriteModel.rememberExpanded = false
+            rewriteModel.rememberPairs = []
+            rewriteModel.rememberChecked = []
             rewriteModel.phase = .noChange
             try await save("rewrite-nochange")
             show(PermissionView(), size: NSSize(width: 420, height: 360))
@@ -391,6 +444,9 @@ final class DebugUICapture {
                               initialTab: 2, hotkeyRecordingPreview: true),
                  size: NSSize(width: 560, height: 660), dark: true)
             try await save("settings-ai-recording-dark")
+            show(SettingsView(settings: captureSettings, initialTab: 3),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-personal-dark")
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit"),
                  size: NSSize(width: 560, height: 660), dark: true)
             scrollTo(fraction: 0.42, in: window.contentView)
@@ -409,8 +465,18 @@ final class DebugUICapture {
                  size: NSSize(width: 360, height: 140), dark: true)
             try await save("settings-chips-disabled-dark")
             rewriteModel.phase = .result
-            show(rewriteStage(rewriteModel, dark: true),
-                 size: NSSize(width: 620, height: 420), dark: true)
+            rewriteModel.rememberPairs = RewriteDiff.wordPairs(
+                original: rewriteModel.original,
+                result: rewriteModel.result
+            )
+            rewriteModel.rememberChecked = Set(rewriteModel.rememberPairs.indices)
+            rewriteModel.rememberExpanded = true
+            show(rewriteStage(rewriteModel, dark: true, height: 560),
+                 size: NSSize(width: 620, height: 560), dark: true)
+            try await save("rewrite-remember-dark")
+            rewriteModel.rememberExpanded = false
+            rewriteModel.rememberPairs = []
+            rewriteModel.rememberChecked = []
             try await save("rewrite-result-dark")
             show(PermissionView(), size: NSSize(width: 420, height: 360), dark: true)
             try await save("permission-dark")
@@ -425,15 +491,125 @@ final class DebugUICapture {
             try await save("card-dark-mode")
             model.phase = .success
             try await save("card-success-dark")
+            // selection-check session card: "2/3" stepper in the header
+            model.update(finding: model.finding, matchedText: model.matchedText)
+            model.setSessionStep(index: 1, count: 3)
+            try await save("card-session-dark")
+            // selection-check empty variant: slider + 重新检测
+            model.presentEmpty(sensitivity: 2, flash: false)
+            try await save("card-empty-dark")
+            model.update(finding: model.finding, matchedText: model.matchedText)
+            show(card(), size: NSSize(width: 620, height: 500))
+            model.setSessionStep(index: 1, count: 3)
+            try await save("card-session")
+            model.presentEmpty(sensitivity: 2, flash: false)
+            try await save("card-empty")
+            model.presentEmpty(sensitivity: 3, flash: true)
+            try await save("card-empty-flash")
+            // personal finding: 个人偏好 tag + teal category dot
+            model.presentEmpty(sensitivity: 2, flash: false)
+            model.update(
+                finding: Finding(
+                    category: .personal, ruleId: "personal.replace",
+                    message: "个人偏好：用「帮助」代替「赋能」",
+                    start: 0, end: 2, suggestions: ["帮助"], tier: 1
+                ),
+                matchedText: "赋能"
+            )
+            try await save("card-personal")
+            show(card(dark: true), size: NSSize(width: 620, height: 500), dark: true)
+            try await save("card-personal-dark")
+            model.setSessionStep(index: 0, count: 0)
             show(MenuContent(controller: controller), size: NSSize(width: 300, height: 270), dark: true)
             try await save("menu-dark")
             show(MenuContent(controller: controller, groupsExpanded: true),
                  size: NSSize(width: 300, height: 400), dark: true)
             try await save("menu-expanded-dark")
+
+            // ---- English UI (uiLanguage = .en on a temp-suite settings
+            // object — the real com.local.deai defaults stay untouched) ----
+            let enSettings = AppSettings(
+                userDefaults: UserDefaults(suiteName: "deai.capture-en")!,
+                secrets: InMemorySecretStore(),
+                lexicon: captureLexicon
+            )
+            enSettings.uiLanguage = .en
+            show(SettingsView(settings: enSettings, currentBundleId: "com.apple.TextEdit"),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-check-en")
+            show(SettingsView(settings: enSettings, currentBundleId: "com.apple.TextEdit"),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-check-en-dark")
+            show(SettingsView(settings: enSettings, initialTab: 1),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-appearance-en")
+            show(SettingsView(settings: enSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-ai-en")
+            show(SettingsView(settings: enSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-ai-en-dark")
+            show(SettingsView(settings: enSettings, initialTab: 3),
+                 size: NSSize(width: 560, height: 660))
+            try await save("settings-personal-en")
+            show(SettingsView(settings: enSettings, initialTab: 3),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            try await save("settings-personal-en-dark")
+
+            model.lang = .en
+            model.update(
+                finding: Finding(category: .markdown, ruleId: "md.bold",
+                                 message: "Markdown 残留：加粗", start: 0, end: 6,
+                                 suggestions: ["粗体"], tier: 1),
+                matchedText: "**粗体**"
+            )
+            show(card(), size: NSSize(width: 620, height: 500))
+            try await save("card-idle-en")
+            model.setSessionStep(index: 1, count: 3)
+            try await save("card-session-en")
+            model.presentEmpty(sensitivity: 2, flash: false)
+            try await save("card-empty-en")
+            show(card(dark: true), size: NSSize(width: 620, height: 500), dark: true)
+            model.setSessionStep(index: 1, count: 3)
+            try await save("card-session-en-dark")
+            model.presentEmpty(sensitivity: 2, flash: false)
+            try await save("card-empty-en-dark")
+            model.setSessionStep(index: 0, count: 0)
+
+            rewriteModel.lang = .en
+            rewriteModel.phase = .result
+            rewriteModel.rememberPairs = RewriteDiff.wordPairs(
+                original: rewriteModel.original,
+                result: rewriteModel.result
+            )
+            rewriteModel.rememberChecked = Set(rewriteModel.rememberPairs.indices)
+            rewriteModel.rememberExpanded = true
+            show(rewriteStage(rewriteModel, height: 560),
+                 size: NSSize(width: 620, height: 560))
+            try await save("rewrite-remember-en")
+            show(rewriteStage(rewriteModel, dark: true, height: 560),
+                 size: NSSize(width: 620, height: 560), dark: true)
+            try await save("rewrite-remember-en-dark")
+
+            show(MenuContent(controller: controller, groupsExpanded: true,
+                             settings: enSettings),
+                 size: NSSize(width: 300, height: 400))
+            try await save("menu-expanded-en")
+            show(MenuContent(controller: controller, groupsExpanded: true,
+                             settings: enSettings),
+                 size: NSSize(width: 300, height: 400), dark: true)
+            try await save("menu-expanded-en-dark")
+            show(PermissionView().environment(\.deaiUILanguage, .en),
+                 size: NSSize(width: 420, height: 360))
+            try await save("permission-en")
             print("UI capture complete")
         } catch {
+            FileHandle.standardError.write(
+                Data("UI capture failed: \(error)\n".utf8)
+            )
             print("UI capture failed: \(error)")
         }
+        FileHandle.standardError.write(Data("CAP end\n".utf8))
         NSApp.terminate(nil)
     }
 }

@@ -8,13 +8,14 @@ public enum UnderlineShape: String, Codable, CaseIterable {
     case dashed
     case dotted
 
-    public var displayName: String {
-        switch self {
-        case .straight: return "直线"
-        case .wavy: return "波浪线"
-        case .dashed: return "虚线"
-        case .dotted: return "点线"
+    public func displayName(_ lang: UILanguage) -> String {
+        let key: L10n.Key = switch self {
+        case .straight: .shapeStraight
+        case .wavy: .shapeWavy
+        case .dashed: .shapeDashed
+        case .dotted: .shapeDotted
         }
+        return L10n.t(key, lang)
     }
 }
 
@@ -75,6 +76,7 @@ public struct UnderlineAppearance: Codable, Equatable {
             "aiToneZh": UnderlineStyle(colorHex: "", shape: .straight),
             "aiToneEn": UnderlineStyle(colorHex: "", shape: .straight),
             "markdown": UnderlineStyle(colorHex: "", shape: .straight),
+            "personal": UnderlineStyle(colorHex: "", shape: .straight),
         ]
     )
 
@@ -84,6 +86,7 @@ public struct UnderlineAppearance: Codable, Equatable {
         case .aiToneZh: return "aiToneZh"
         case .aiToneEn: return "aiToneEn"
         case .markdown: return "markdown"
+        case .personal: return "personal"
         }
     }
 
@@ -104,13 +107,15 @@ public struct UnderlineAppearance: Codable, Equatable {
 }
 
 public extension Category {
-    var displayName: String {
-        switch self {
-        case .grammar: return "语法"
-        case .aiToneZh: return "中文 AI 腔"
-        case .aiToneEn: return "英文 AI 腔"
-        case .markdown: return "Markdown 残留"
+    func displayName(_ lang: UILanguage) -> String {
+        let key: L10n.Key = switch self {
+        case .grammar: .catNameGrammar
+        case .aiToneZh: .catNameAIToneZh
+        case .aiToneEn: .catNameAIToneEn
+        case .markdown: .catNameMarkdown
+        case .personal: .catNamePersonal
         }
+        return L10n.t(key, lang)
     }
 }
 

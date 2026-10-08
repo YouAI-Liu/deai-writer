@@ -31,6 +31,10 @@ public final class AppSettings: ObservableObject {
     @Published public var markdown: Bool {
         didSet { save() }
     }
+    /// Personal-lexicon check (替换/避免 findings; 保留 suppresses others).
+    @Published public var personal: Bool {
+        didSet { save() }
+    }
     /// 1 = 严格, 2 = 标准, 3 = 敏感.
     @Published public var sensitivity: Int {
         didSet {
@@ -55,6 +59,12 @@ public final class AppSettings: ObservableObject {
         didSet { save() }
     }
 
+    /// UI language (中文/English). Applied live everywhere via the
+    /// `deaiUILanguage` environment value.
+    @Published public var uiLanguage: UILanguage {
+        didSet { save() }
+    }
+
     /// AI-rewrite providers; the selected one is `activeProviderId`.
     /// (internal: ProviderConfig/SecretStore are app-internal types)
     @Published var providers: [ProviderConfig] {
@@ -72,6 +82,10 @@ public final class AppSettings: ObservableObject {
     /// UserDefaults, never logged.
     let secrets: SecretStore
 
+    /// Personal lexicon + style notes (file-backed, watched for external
+    /// edits). Injected so tests/captures can use a temp directory.
+    let lexicon: PersonalLexiconStore
+
     /// Session-scoped ignores: `(ruleId, matchedText)` pairs — cleared on
     /// relaunch, intentionally not persisted.
     @Published public var sessionIgnored: Set<IgnoreKey> = []
@@ -87,7 +101,8 @@ public final class AppSettings: ObservableObject {
 
     init(
         userDefaults: UserDefaults = .standard,
-        secrets: SecretStore = KeychainSecretStore()
+        secrets: SecretStore = KeychainSecretStore(),
+        lexicon: PersonalLexiconStore = PersonalLexiconStore()
     ) {
         var stored: Stored?
         if let data = userDefaults.data(forKey: Self.defaultsKey) {
@@ -98,6 +113,7 @@ public final class AppSettings: ObservableObject {
         self.aiToneZh = stored?.aiToneZh ?? true
         self.aiToneEn = stored?.aiToneEn ?? true
         self.markdown = stored?.markdown ?? true
+        self.personal = stored?.personal ?? true
         self.sensitivity = stored?.sensitivity ?? 2
         self.disabledRuleIds = stored?.disabledRuleIds ?? []
         self.appRules = stored?.appRules ?? [:]
@@ -105,7 +121,14 @@ public final class AppSettings: ObservableObject {
         var rules = AppGroup.defaultRules
         if let storedRules = stored?.groupRules {
             for (key, rule) in storedRules {
-                if let group = AppGroup(rawValue: key) { rules[group] = rule }
+                guard let group = AppGroup(rawValue: key) else { continue }
+                var rule = rule
+                // v0 → v1 migration: saved group rules predate the personal
+                // lexicon, so inject its chip (default on everywhere)
+                if (stored?.schemaVersion ?? 0) < 1 {
+                    rule.checks.insert(.personal)
+                }
+                rules[group] = rule
             }
         }
         self.groupRules = rules
@@ -117,18 +140,26 @@ public final class AppSettings: ObservableObject {
         self.activeProviderId = stored?.activeProviderId
             ?? providers.first?.id
         self.rewriteHotkey = stored?.rewriteHotkey ?? .default
+        // Old payloads lack `uiLanguage` → zh; a truly fresh install
+        // (`stored == nil`) follows the system language instead.
+        self.uiLanguage = stored?.uiLanguage
+            ?? (stored == nil ? UILanguage.systemDefault : .zh)
         self.userDefaults = userDefaults
         self.secrets = secrets
+        self.lexicon = lexicon
     }
 
     private let userDefaults: UserDefaults
 
     private struct Stored: Codable {
+        /// 0 = pre-lexicon save; 1 adds `personal` + the `.personal` chip.
+        var schemaVersion: Int
         var autoUnderline: Bool
         var grammar: Bool
         var aiToneZh: Bool
         var aiToneEn: Bool
         var markdown: Bool
+        var personal: Bool
         var sensitivity: Int
         var disabledRuleIds: Set<String>
         var appRules: [String: AppRule]
@@ -140,20 +171,25 @@ public final class AppSettings: ObservableObject {
         var providers: [ProviderConfig]?
         var activeProviderId: UUID?
         var rewriteHotkey: RewriteHotkey?
+        var uiLanguage: UILanguage?
 
         init(
+            schemaVersion: Int,
             autoUnderline: Bool, grammar: Bool, aiToneZh: Bool,
-            aiToneEn: Bool, markdown: Bool, sensitivity: Int,
+            aiToneEn: Bool, markdown: Bool, personal: Bool,
+            sensitivity: Int,
             disabledRuleIds: Set<String>, appRules: [String: AppRule],
             underline: UnderlineAppearance, groupRules: [String: GroupRule],
             providers: [ProviderConfig]?, activeProviderId: UUID?,
-            rewriteHotkey: RewriteHotkey?
+            rewriteHotkey: RewriteHotkey?, uiLanguage: UILanguage? = nil
         ) {
+            self.schemaVersion = schemaVersion
             self.autoUnderline = autoUnderline
             self.grammar = grammar
             self.aiToneZh = aiToneZh
             self.aiToneEn = aiToneEn
             self.markdown = markdown
+            self.personal = personal
             self.sensitivity = sensitivity
             self.disabledRuleIds = disabledRuleIds
             self.appRules = appRules
@@ -162,17 +198,20 @@ public final class AppSettings: ObservableObject {
             self.providers = providers
             self.activeProviderId = activeProviderId
             self.rewriteHotkey = rewriteHotkey
+            self.uiLanguage = uiLanguage
         }
 
         /// Tolerant decode: settings written by older builds (which lack the
         /// newer keys) must load instead of failing wholesale.
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
+            schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 0
             autoUnderline = try c.decodeIfPresent(Bool.self, forKey: .autoUnderline) ?? true
             grammar = try c.decodeIfPresent(Bool.self, forKey: .grammar) ?? true
             aiToneZh = try c.decodeIfPresent(Bool.self, forKey: .aiToneZh) ?? true
             aiToneEn = try c.decodeIfPresent(Bool.self, forKey: .aiToneEn) ?? true
             markdown = try c.decodeIfPresent(Bool.self, forKey: .markdown) ?? true
+            personal = try c.decodeIfPresent(Bool.self, forKey: .personal) ?? true
             sensitivity = try c.decodeIfPresent(Int.self, forKey: .sensitivity) ?? 2
             disabledRuleIds = try c.decodeIfPresent(Set<String>.self, forKey: .disabledRuleIds) ?? []
             appRules = try c.decodeIfPresent([String: AppRule].self, forKey: .appRules) ?? [:]
@@ -181,16 +220,19 @@ public final class AppSettings: ObservableObject {
             providers = try c.decodeIfPresent([ProviderConfig].self, forKey: .providers)
             activeProviderId = try c.decodeIfPresent(UUID.self, forKey: .activeProviderId)
             rewriteHotkey = try c.decodeIfPresent(RewriteHotkey.self, forKey: .rewriteHotkey)
+            uiLanguage = try c.decodeIfPresent(UILanguage.self, forKey: .uiLanguage)
         }
     }
 
     private func save() {
         let stored = Stored(
+            schemaVersion: 1,
             autoUnderline: autoUnderline,
             grammar: grammar,
             aiToneZh: aiToneZh,
             aiToneEn: aiToneEn,
             markdown: markdown,
+            personal: personal,
             sensitivity: sensitivity,
             disabledRuleIds: disabledRuleIds,
             appRules: appRules,
@@ -200,7 +242,8 @@ public final class AppSettings: ObservableObject {
             ),
             providers: providers,
             activeProviderId: activeProviderId,
-            rewriteHotkey: rewriteHotkey
+            rewriteHotkey: rewriteHotkey,
+            uiLanguage: uiLanguage
         )
         if let data = try? JSONEncoder().encode(stored) {
             userDefaults.set(data, forKey: Self.defaultsKey)
@@ -275,6 +318,7 @@ public final class AppSettings: ObservableObject {
             aiToneEn: aiToneEn && isCheckEnabled(.aiToneEn, for: bundleId),
             aiToneZh: aiToneZh && isCheckEnabled(.aiToneZh, for: bundleId),
             markdown: markdown && markdownEnabled(for: bundleId),
+            personal: personal && isCheckEnabled(.personal, for: bundleId),
             sensitivity: UInt8(clamping: sensitivity)
         )
     }

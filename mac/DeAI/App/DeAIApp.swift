@@ -38,12 +38,14 @@ struct DeAIApp: App {
             MenuContent(controller: appDelegate.controller)
         }
         .menuBarExtraStyle(.window)
-        Window("调试：规则测试窗口", id: "debug") {
-            ContentView()
+        Window(L10n.t(.windowRuleTest, appDelegate.controller.settings.uiLanguage), id: "debug") {
+            LanguageScoped { ContentView() }
+                .environmentObject(appDelegate.controller.settings)
         }
         #if DEBUG
-        Window("UI 预览", id: "ui-preview") {
-            DebugUIShowcase()
+        Window(L10n.t(.menuUIPreview, appDelegate.controller.settings.uiLanguage), id: "ui-preview") {
+            LanguageScoped { DebugUIShowcase() }
+                .environmentObject(appDelegate.controller.settings)
         }
         #endif
     }
@@ -55,11 +57,16 @@ struct MenuContent: View {
     @Environment(\.openWindow) private var openWindow
     @State private var groupsExpanded: Bool
 
-    init(controller: AppController, groupsExpanded: Bool = false) {
+    init(
+        controller: AppController, groupsExpanded: Bool = false,
+        settings: AppSettings? = nil
+    ) {
         self.controller = controller
-        _settings = ObservedObject(wrappedValue: controller.settings)
+        _settings = ObservedObject(wrappedValue: settings ?? controller.settings)
         _groupsExpanded = State(initialValue: groupsExpanded)
     }
+
+    private var lang: UILanguage { settings.uiLanguage }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -67,7 +74,7 @@ struct MenuContent: View {
                 Text("DeAI").font(DeAIDesign.titleFont(22)).tracking(-0.7)
                 Spacer()
             }
-            Toggle("自动下划线", isOn: $settings.autoUnderline)
+            Toggle(L10n.t(.menuAutoUnderline, lang), isOn: $settings.autoUnderline)
                 .toggleStyle(DeAIToggleStyle())
             // sensitive apps (terminals, password managers) are hard-excluded
             // — a toggle there would be a no-op, so hide the row entirely
@@ -81,7 +88,7 @@ struct MenuContent: View {
                         }
                     }
                 )) {
-                    Text("在 \(appName(bundleId)) 中检查").lineLimit(2)
+                    Text(L10n.f(.menuCheckInApp, lang, appName(bundleId))).lineLimit(2)
                 }
                 .toggleStyle(DeAIToggleStyle())
             }
@@ -92,7 +99,7 @@ struct MenuContent: View {
                 withAnimation(DeAIDesign.motion(false)) { groupsExpanded.toggle() }
             } label: {
                 HStack {
-                    Text("应用类型")
+                    Text(L10n.t(.menuAppGroups, lang))
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(DeAIDesign.font(10, weight: .semibold))
@@ -105,7 +112,7 @@ struct MenuContent: View {
             if groupsExpanded {
                 VStack(spacing: 12) {
                     ForEach(AppGroup.configurable, id: \.self) { group in
-                        Toggle(group.displayName, isOn: groupBinding(group))
+                        Toggle(group.displayName(lang), isOn: groupBinding(group))
                             .toggleStyle(DeAIToggleStyle())
                     }
                 }
@@ -114,12 +121,12 @@ struct MenuContent: View {
             }
             Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
             VStack(spacing: 16) {
-                menuButton("设置") { controller.showSettingsWindow() }
-                menuButton("规则测试窗口") { openWindow(id: "debug") }
+                menuButton(L10n.t(.menuSettings, lang)) { controller.showSettingsWindow() }
+                menuButton(L10n.t(.menuRuleTest, lang)) { openWindow(id: "debug") }
                 #if DEBUG
-                menuButton("UI 预览") { openWindow(id: "ui-preview") }
+                menuButton(L10n.t(.menuUIPreview, lang)) { openWindow(id: "ui-preview") }
                 #endif
-                menuButton("退出 DeAI") { NSApp.terminate(nil) }
+                menuButton(L10n.t(.menuQuit, lang)) { NSApp.terminate(nil) }
             }
         }
         .font(DeAIDesign.font(12))
@@ -128,6 +135,7 @@ struct MenuContent: View {
         // fill the whole MenuBarExtra window edge to edge; the system window
         // already supplies the rounded corners and border
         .background(DeAIDesign.background.ignoresSafeArea())
+        .environment(\.deaiUILanguage, settings.uiLanguage)
     }
 
     private func menuButton(_ title: String, action: @escaping () -> Void) -> some View {

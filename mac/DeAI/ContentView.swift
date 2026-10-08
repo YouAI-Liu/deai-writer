@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.deaiUILanguage) private var lang
     @State private var text = "我们不是工具，而是伙伴。This is an test. **bold**"
     @State private var grammar = true
     @State private var aiToneEn = true
@@ -16,10 +17,10 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
-                Text("规则测试")
+                Text(L10n.t(.ruleTestTitle, lang))
                     .font(DeAIDesign.titleFont(26)).tracking(-0.8)
                 Spacer()
-                Text("\(findings.count) 条提示")
+                Text(L10n.f(.findingsCount, lang, findings.count))
                     .font(DeAIDesign.font(11)).foregroundStyle(DeAIDesign.muted)
             }
             TextEditor(text: $text)
@@ -27,16 +28,16 @@ struct ContentView: View {
                 .padding(16).frame(minHeight: 140)
                 .background(DeAIDesign.surface, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
             HStack(spacing: 20) {
-                Toggle("语法", isOn: $grammar)
-                Toggle("英文 AI 腔", isOn: $aiToneEn)
-                Toggle("中文 AI 腔", isOn: $aiToneZh)
-                Toggle("Markdown", isOn: $markdown)
+                Toggle(CheckKind.grammar.shortName(lang), isOn: $grammar)
+                Toggle(CheckKind.aiToneEn.shortName(lang), isOn: $aiToneEn)
+                Toggle(CheckKind.aiToneZh.shortName(lang), isOn: $aiToneZh)
+                Toggle(CheckKind.markdown.shortName(lang), isOn: $markdown)
             }
             .font(DeAIDesign.font(11)).toggleStyle(DeAIToggleStyle())
             HStack {
                 SensitivityControl(selection: $sensitivity).frame(width: 230)
                 Spacer()
-                Button("清除 Markdown") {
+                Button(L10n.t(.stripMarkdown, lang)) {
                     text = stripMarkdown(text: text, opts: currentOptions())
                 }
                 .buttonStyle(DeAIButtonStyle())
@@ -50,11 +51,12 @@ struct ContentView: View {
                                 Spacer()
                                 SecondaryLabel(finding.ruleId)
                             }
-                            Text(finding.message).font(DeAIDesign.font(14, weight: .medium))
-                            Text("原文：\(excerpt(finding))")
+                            Text(L10n.findingMessage(finding, matched: excerpt(finding), lang: lang))
+                                .font(DeAIDesign.font(14, weight: .medium))
+                            Text(L10n.f(.originalPrefix, lang, excerpt(finding)))
                                 .font(DeAIDesign.font(12)).foregroundStyle(DeAIDesign.muted)
                             if !finding.suggestions.isEmpty {
-                                Text("建议：\(finding.suggestions.joined(separator: " / "))")
+                                Text(L10n.f(.suggestionsPrefix, lang, finding.suggestions.joined(separator: " / ")))
                                     .font(DeAIDesign.font(12))
                             }
                         }
@@ -83,6 +85,7 @@ struct ContentView: View {
             aiToneEn: aiToneEn,
             aiToneZh: aiToneZh,
             markdown: markdown,
+            personal: true,
             sensitivity: UInt8(clamping: sensitivity)
         )
     }
@@ -110,12 +113,7 @@ struct ContentView: View {
     }
 
     private func categoryName(_ category: Category) -> String {
-        switch category {
-        case .grammar: "语法"
-        case .aiToneEn: "英文 AI 腔"
-        case .aiToneZh: "中文 AI 腔"
-        case .markdown: "Markdown"
-        }
+        category.displayName(lang)
     }
 }
 

@@ -11,46 +11,52 @@ public enum AppGroup: String, Codable, CaseIterable {
     case sensitive
     case other
 
-    public var displayName: String {
-        switch self {
-        case .browser: return "浏览器"
-        case .office: return "Office 与文档"
-        case .notes: return "笔记"
-        case .communication: return "聊天与邮件"
-        case .code: return "代码编辑器"
-        case .sensitive: return "终端与密码"
-        case .other: return "其他"
+    public func displayName(_ lang: UILanguage) -> String {
+        let key: L10n.Key = switch self {
+        case .browser: .groupBrowser
+        case .office: .groupOffice
+        case .notes: .groupNotes
+        case .communication: .groupCommunication
+        case .code: .groupCode
+        case .sensitive: .groupSensitive
+        case .other: .groupOther
         }
+        return L10n.t(key, lang)
     }
 
-    /// Example apps shown as a caption in settings.
-    public var examples: String {
-        switch self {
-        case .browser: return "Safari、Chrome、Arc、Firefox"
-        case .office: return "Word、Pages、WPS、Excel、Keynote"
-        case .notes: return "备忘录、Obsidian、Notion、Bear、文本编辑"
-        case .communication: return "邮件、微信、Slack、飞书、钉钉"
-        case .code: return "VSCode、Cursor、Zed、Xcode、JetBrains"
-        case .sensitive: return "终端、iTerm2、Warp、钥匙串、1Password"
-        case .other: return "未归类的应用"
+    /// Example apps shown as a caption in settings — the list connector is
+    /// localized, the app names themselves are not.
+    public func examples(_ lang: UILanguage) -> String {
+        let key: L10n.Key = switch self {
+        case .browser: .examplesBrowser
+        case .office: .examplesOffice
+        case .notes: .examplesNotes
+        case .communication: .examplesCommunication
+        case .code: .examplesCode
+        case .sensitive: .examplesSensitive
+        case .other: .examplesOther
         }
+        return L10n.t(key, lang)
     }
 }
 
-/// The four check categories, used for per-group check selection.
+/// The check categories, used for per-group check selection.
 public enum CheckKind: String, Codable, CaseIterable {
     case grammar
     case aiToneZh
     case aiToneEn
     case markdown
+    case personal
 
-    public var shortName: String {
-        switch self {
-        case .grammar: return "语法"
-        case .aiToneZh: return "中文"
-        case .aiToneEn: return "英文"
-        case .markdown: return "MD"
+    public func shortName(_ lang: UILanguage) -> String {
+        let key: L10n.Key = switch self {
+        case .grammar: .kindGrammar
+        case .aiToneZh: .kindAIToneZh
+        case .aiToneEn: .kindAIToneEn
+        case .markdown: .kindMarkdown
+        case .personal: .kindPersonal
         }
+        return L10n.t(key, lang)
     }
 }
 

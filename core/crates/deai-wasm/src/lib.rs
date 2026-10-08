@@ -42,3 +42,21 @@ pub fn strip_markdown(text: &str, opts: JsValue) -> Result<String, JsValue> {
 pub fn apply_suggestion(text: &str, start: u32, end: u32, replacement: &str) -> String {
     deai_core::apply_suggestion(text, start, end, replacement)
 }
+
+/// Personal-lexicon findings; `entries` is a JS array of
+/// `{ kind: "replace"|"avoid"|"keep", term, replacement?, matchKind }`.
+#[wasm_bindgen]
+pub fn check_personal(text: &str, entries: JsValue) -> Result<JsValue, JsValue> {
+    let entries: Vec<deai_core::PersonalEntry> =
+        serde_wasm_bindgen::from_value(entries)?;
+    Ok(serde_wasm_bindgen::to_value(&deai_core::check_personal(text, &entries))?)
+}
+
+/// UTF-16 `[start, end)` ranges covered by `keep` entries (for suppressing
+/// other categories' findings).
+#[wasm_bindgen]
+pub fn personal_keep_ranges(text: &str, entries: JsValue) -> Result<JsValue, JsValue> {
+    let entries: Vec<deai_core::PersonalEntry> =
+        serde_wasm_bindgen::from_value(entries)?;
+    Ok(serde_wasm_bindgen::to_value(&deai_core::personal_keep_ranges(text, &entries))?)
+}
