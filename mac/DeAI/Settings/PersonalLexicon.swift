@@ -93,12 +93,8 @@ public enum LexiconError: Error, Equatable {
     case duplicate
 }
 
-/// File-backed personal lexicon + rewrite style notes.
-///
-/// - `lexicon.json`  → `[LexiconEntry]` (max 200, term ≤ 100 chars)
-/// - `style.md`      → free-form style text (prompt truncates to 4000 chars)
-///
-/// Both are watched for external edits (users may hand-edit or sync them)
+/// File-backed personal lexicon — `lexicon.json` → `[LexiconEntry]`
+/// (max 200, term ≤ 100 chars). The file is watched for external edits
 /// and written atomically. A corrupt `lexicon.json` is renamed to
 /// `*.corrupt-<timestamp>` before a fresh file is ever written in its place —
 /// the bad data is never silently overwritten.
@@ -106,15 +102,12 @@ final class PersonalLexiconStore: ObservableObject {
     private let log = Logger(subsystem: "com.local.deai", category: "lexicon")
 
     @Published private(set) var entries: [LexiconEntry] = []
-    @Published private(set) var style: String
 
     static let maxEntries = 200
     static let maxTermLength = 100
-    static let maxStyleLength = 4000
 
     let directory: URL
     private let lexiconURL: URL
-    private let styleURL: URL
     private var watcher: DispatchSourceFileSystemObject?
     private var watcherFD: Int32 = -1
     /// Per-file sources — the directory watcher alone misses in-place
@@ -132,12 +125,10 @@ final class PersonalLexiconStore: ObservableObject {
     init(directory: URL = PersonalLexiconStore.defaultDirectory) {
         self.directory = directory
         lexiconURL = directory.appendingPathComponent("lexicon.json")
-        styleURL = directory.appendingPathComponent("style.md")
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true
         )
         entries = Self.loadEntries(from: lexiconURL, log: log)
-        style = Self.loadStyle(from: styleURL, log: log)
         startWatching()
     }
 
@@ -159,18 +150,6 @@ final class PersonalLexiconStore: ObservableObject {
         }
         renameCorrupt(url, log: log)
         return []
-    }
-
-    /// `style.md` is plain text; non-UTF-8 bytes count as corrupt.
-    private static func loadStyle(from url: URL, log: Logger) -> String {
-        guard let data = try? Data(contentsOf: url) else {
-            return RewritePrompt.defaultStyle
-        }
-        guard let text = String(data: data, encoding: .utf8) else {
-            renameCorrupt(url, log: log)
-            return RewritePrompt.defaultStyle
-        }
-        return text
     }
 
     private static func renameCorrupt(_ url: URL, log: Logger) {
@@ -202,11 +181,6 @@ final class PersonalLexiconStore: ObservableObject {
         writeAtomically(data, to: lexiconURL)
     }
 
-    private func saveStyle() {
-        guard let data = style.data(using: .utf8) else { return }
-        writeAtomically(data, to: styleURL)
-    }
-
     // MARK: - external edits
 
     /// Watch the containing directory (covers create/replace/delete of both
@@ -227,7 +201,6 @@ final class PersonalLexiconStore: ObservableObject {
         source.resume()
         watcher = source
         armFileWatcher(for: lexiconURL)
-        armFileWatcher(for: styleURL)
     }
 
     private func scheduleReload() {
@@ -266,8 +239,8 @@ final class PersonalLexiconStore: ObservableObject {
     /// Re-arm file watchers whose sources were dropped (.rename/.delete) or
     /// never armed (file created after launch / after a corrupt rename).
     private func rearmFileWatchers() {
-        for url in [lexiconURL, styleURL] where fileWatchers[url] == nil {
-            armFileWatcher(for: url)
+        if fileWatchers[lexiconURL] == nil {
+            armFileWatcher(for: lexiconURL)
         }
     }
 
@@ -275,10 +248,6 @@ final class PersonalLexiconStore: ObservableObject {
         let loaded = Self.loadEntries(from: lexiconURL, log: log)
         if loaded != entries {
             entries = loaded
-        }
-        let newStyle = Self.loadStyle(from: styleURL, log: log)
-        if newStyle != style {
-            style = newStyle
         }
         rearmFileWatchers()
     }
@@ -354,12 +323,6 @@ final class PersonalLexiconStore: ObservableObject {
         }
         if isDuplicate(entry) { return L10n.t(.errDuplicate, lang) }
         return nil
-    }
-
-    func setStyle(_ text: String) {
-        guard text != style else { return }
-        style = text
-        saveStyle()
     }
 
     /// "在 Finder 中显示" — reveal `lexicon.json` if it exists, else the dir.

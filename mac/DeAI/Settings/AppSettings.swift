@@ -77,6 +77,14 @@ public final class AppSettings: ObservableObject {
     @Published var rewriteHotkey: RewriteHotkey {
         didSet { save() }
     }
+    /// Selected rewrite skill id for Chinese text (zh|any skills offered).
+    @Published var rewriteSkillZh: String {
+        didSet { save() }
+    }
+    /// Selected rewrite skill id for English text (en|any skills offered).
+    @Published var rewriteSkillEn: String {
+        didSet { save() }
+    }
 
     /// API keys live in the keychain, keyed by provider UUID — never in
     /// UserDefaults, never logged.
@@ -85,6 +93,10 @@ public final class AppSettings: ObservableObject {
     /// Personal lexicon + style notes (file-backed, watched for external
     /// edits). Injected so tests/captures can use a temp directory.
     let lexicon: PersonalLexiconStore
+
+    /// Rewrite skills (built-in + user `.md` files under `skills/`).
+    /// Injected so tests/captures use temp dirs.
+    let skills: RewriteSkillStore
 
     /// Session-scoped ignores: `(ruleId, matchedText)` pairs — cleared on
     /// relaunch, intentionally not persisted.
@@ -102,7 +114,8 @@ public final class AppSettings: ObservableObject {
     init(
         userDefaults: UserDefaults = .standard,
         secrets: SecretStore = KeychainSecretStore(),
-        lexicon: PersonalLexiconStore = PersonalLexiconStore()
+        lexicon: PersonalLexiconStore = PersonalLexiconStore(),
+        skills: RewriteSkillStore? = nil
     ) {
         var stored: Stored?
         if let data = userDefaults.data(forKey: Self.defaultsKey) {
@@ -147,6 +160,21 @@ public final class AppSettings: ObservableObject {
         self.userDefaults = userDefaults
         self.secrets = secrets
         self.lexicon = lexicon
+        // Rewrite skills share the lexicon's app-support dir when not
+        // injected (`skills/` subdir + legacy `style.md` next to it).
+        let skillsStore = skills
+            ?? RewriteSkillStore(baseDirectory: lexicon.directory)
+        self.skills = skillsStore
+        // Selections default to the built-in; a just-migrated custom
+        // style.md takes over only unset/built-in slots.
+        var skillZh = stored?.rewriteSkillZh ?? RewriteSkillStore.builtinId
+        var skillEn = stored?.rewriteSkillEn ?? RewriteSkillStore.builtinId
+        if let migrated = skillsStore.migratedSkillId {
+            if skillZh == RewriteSkillStore.builtinId { skillZh = migrated }
+            if skillEn == RewriteSkillStore.builtinId { skillEn = migrated }
+        }
+        self.rewriteSkillZh = skillZh
+        self.rewriteSkillEn = skillEn
     }
 
     private let userDefaults: UserDefaults
@@ -172,6 +200,8 @@ public final class AppSettings: ObservableObject {
         var activeProviderId: UUID?
         var rewriteHotkey: RewriteHotkey?
         var uiLanguage: UILanguage?
+        var rewriteSkillZh: String?
+        var rewriteSkillEn: String?
 
         init(
             schemaVersion: Int,
@@ -181,7 +211,8 @@ public final class AppSettings: ObservableObject {
             disabledRuleIds: Set<String>, appRules: [String: AppRule],
             underline: UnderlineAppearance, groupRules: [String: GroupRule],
             providers: [ProviderConfig]?, activeProviderId: UUID?,
-            rewriteHotkey: RewriteHotkey?, uiLanguage: UILanguage? = nil
+            rewriteHotkey: RewriteHotkey?, uiLanguage: UILanguage? = nil,
+            rewriteSkillZh: String? = nil, rewriteSkillEn: String? = nil
         ) {
             self.schemaVersion = schemaVersion
             self.autoUnderline = autoUnderline
@@ -199,6 +230,8 @@ public final class AppSettings: ObservableObject {
             self.activeProviderId = activeProviderId
             self.rewriteHotkey = rewriteHotkey
             self.uiLanguage = uiLanguage
+            self.rewriteSkillZh = rewriteSkillZh
+            self.rewriteSkillEn = rewriteSkillEn
         }
 
         /// Tolerant decode: settings written by older builds (which lack the
@@ -221,6 +254,8 @@ public final class AppSettings: ObservableObject {
             activeProviderId = try c.decodeIfPresent(UUID.self, forKey: .activeProviderId)
             rewriteHotkey = try c.decodeIfPresent(RewriteHotkey.self, forKey: .rewriteHotkey)
             uiLanguage = try c.decodeIfPresent(UILanguage.self, forKey: .uiLanguage)
+            rewriteSkillZh = try c.decodeIfPresent(String.self, forKey: .rewriteSkillZh)
+            rewriteSkillEn = try c.decodeIfPresent(String.self, forKey: .rewriteSkillEn)
         }
     }
 
@@ -243,7 +278,9 @@ public final class AppSettings: ObservableObject {
             providers: providers,
             activeProviderId: activeProviderId,
             rewriteHotkey: rewriteHotkey,
-            uiLanguage: uiLanguage
+            uiLanguage: uiLanguage,
+            rewriteSkillZh: rewriteSkillZh,
+            rewriteSkillEn: rewriteSkillEn
         )
         if let data = try? JSONEncoder().encode(stored) {
             userDefaults.set(data, forKey: Self.defaultsKey)

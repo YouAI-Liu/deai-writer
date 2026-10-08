@@ -512,6 +512,8 @@ private struct AISettingsTab: View {
     @State private var testStatus: String?
     @State private var hotkeyError: String?
     @State private var showingAddProvider = false
+    /// Skill being viewed/edited in the sheet (nil = closed).
+    @State private var editingSkill: RewriteSkill?
 
     /// Observes the optional controller's @Published error even though a
     /// plain `var` can't be @ObservedObject.
@@ -598,6 +600,10 @@ private struct AISettingsTab: View {
             if let provider = settings.activeProvider {
                 providerEditor(provider)
             }
+            SkillsSectionView(
+                settings: settings, store: settings.skills,
+                editingSkill: $editingSkill
+            )
             SettingsSection(L10n.t(.sectionShortcut, lang)) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 12) {
@@ -630,9 +636,28 @@ private struct AISettingsTab: View {
                 }
             }
         }
-        .onAppear { refreshKeyState() }
+        .onAppear {
+            refreshKeyState()
+            // in-place edits don't fire the directory watcher — refresh
+            // the skill list every time the tab appears
+            settings.skills.reload()
+        }
         .onReceive(hotkeyErrorPublisher) { hotkeyError = $0 }
         .onChange(of: settings.activeProviderId) { _ in refreshKeyState() }
+        // if the skill being edited is deleted (here or externally),
+        // close the sheet — saving a gone skill would re-create its file
+        .onReceive(settings.skills.$skills.map { $0.map(\.id) }) { ids in
+            if let editing = editingSkill,
+               !editing.isBuiltin, !ids.contains(editing.id) {
+                editingSkill = nil
+            }
+        }
+        .sheet(item: $editingSkill) { skill in
+            SkillEditSheet(
+                skill: skill, store: settings.skills,
+                onDuplicate: { copy in editingSkill = copy }
+            )
+        }
     }
 
     @ViewBuilder
@@ -850,6 +875,529 @@ private struct AISettingsTab: View {
     }
 }
 
+// MARK: - 改写技能
+
+/// AI 改写 tab's 改写技能 section: fixed safety rules, per-language
+/// pickers, the skill list, and 导入技能….
+private struct SkillsSectionView: View {
+    @ObservedObject var settings: AppSettings
+    /// Observed directly — the list must re-render when the store's
+    /// @Published skills change (import/delete/external edits).
+    @ObservedObject var store: RewriteSkillStore
+    @Environment(\.deaiUILanguage) private var lang
+    @Binding var editingSkill: RewriteSkill?
+    @State private var safetyExpanded = false
+    @State private var confirmDelete: RewriteSkill?
+    @State private var importError: String?
+
+    var body: some View {
+        SettingsSection(L10n.t(.sectionSkills, lang)) {
+            VStack(alignment: .leading, spacing: 12) {
+                DisclosureGroup(
+                    isExpanded: $safetyExpanded
+                ) {
+                    Text(RewritePrompt.safetyBlock)
+                        .font(DeAIDesign.font(11))
+                        .foregroundStyle(DeAIDesign.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(
+                            DeAIDesign.sidebar,
+                            in: RoundedRectangle(
+                                cornerRadius: DeAIDesign.controlRadius
+                            )
+                        )
+                } label: {
+                    Text(L10n.t(.safetyDisclosure, lang))
+                        .font(DeAIDesign.font(12))
+                        .foregroundStyle(DeAIDesign.text)
+                }
+                .tint(DeAIDesign.muted)
+
+                HStack(spacing: 12) {
+                    skillPicker(
+                        label: L10n.t(.skillForZh, lang),
+                        language: .zh,
+                        selection: $settings.rewriteSkillZh
+                    )
+                    skillPicker(
+                        label: L10n.t(.skillForEn, lang),
+                        language: .en,
+                        selection: $settings.rewriteSkillEn
+                    )
+                }
+
+                ForEach(store.skills) { skill in
+                    SkillRow(
+                        skill: skill, lang: lang,
+                        onEdit: { editingSkill = skill },
+                        onReveal: { reveal(skill) },
+                        onDelete: skill.isBuiltin
+                            ? nil : { confirmDelete = skill }
+                    )
+                    if skill.id != store.skills.last?.id {
+                        Divider().overlay(DeAIDesign.border.opacity(0.5))
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button(L10n.t(.skillImport, lang)) { importSkill() }
+                        .buttonStyle(
+                            DeAIButtonStyle(secondary: true, compact: true)
+                        )
+                    Button(L10n.t(.showInFinder, lang)) {
+                        NSWorkspace.shared.activateFileViewerSelecting(
+                            [store.fileToReveal]
+                        )
+                    }
+                    .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+                }
+                if let importError {
+                    Text(importError)
+                        .font(DeAIDesign.font(10))
+                        .foregroundStyle(DeAIDesign.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .confirmationDialog(
+            L10n.f(
+                .skillDeleteTitle, lang,
+                confirmDelete?.displayName(lang) ?? ""
+            ),
+            isPresented: Binding(
+                get: { confirmDelete != nil },
+                set: { if !$0 { confirmDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.deleteTooltip, lang), role: .destructive) {
+                delete(confirmDelete)
+            }
+            Button(L10n.t(.cancelButton, lang), role: .cancel) {
+                confirmDelete = nil
+            }
+        } message: {
+            Text(L10n.t(.skillDeleteMessage, lang))
+        }
+    }
+
+    /// zh picker offers zh|any skills, en picker en|any; a missing
+    /// selection resolves to the built-in at display time.
+    private func skillPicker(
+        label: String, language: SkillLanguage, selection: Binding<String>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(DeAIDesign.font(10))
+                .foregroundStyle(DeAIDesign.muted)
+            SkillPickButton(
+                skills: store.eligible(for: language),
+                selection: selection, lang: lang
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func reveal(_ skill: RewriteSkill) {
+        let url = skill.isBuiltin
+            ? store.directory
+            : store.directory.appendingPathComponent("\(skill.id).md")
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func delete(_ skill: RewriteSkill?) {
+        guard let skill, !skill.isBuiltin else { return }
+        store.delete(id: skill.id)
+        // a deleted selection falls back to the built-in
+        if settings.rewriteSkillZh == skill.id {
+            settings.rewriteSkillZh = RewriteSkillStore.builtinId
+        }
+        if settings.rewriteSkillEn == skill.id {
+            settings.rewriteSkillEn = RewriteSkillStore.builtinId
+        }
+        confirmDelete = nil
+    }
+
+    private func importSkill() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.title = L10n.t(.skillImport, lang)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        switch store.importSkill(from: url) {
+        case .success:
+            importError = nil
+        case .failure(let error):
+            importError = skillErrorText(error)
+        }
+    }
+
+    private func skillErrorText(_ error: SkillError) -> String {
+        switch error {
+        case .tooLarge(let size, let max):
+            return L10n.f(.skillTooLarge, lang, size, max)
+        case .notMarkdown:
+            return L10n.t(.skillNotMarkdown, lang)
+        case .emptyName, .unreadable:
+            return L10n.t(.skillUnreadable, lang)
+        }
+    }
+}
+
+/// One skill row: name + language chip + size/estimate + warn badge +
+/// view/edit, reveal, delete actions.
+private struct SkillRow: View {
+    let skill: RewriteSkill
+    var lang: UILanguage
+    var onEdit: () -> Void
+    var onReveal: () -> Void
+    var onDelete: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(skill.displayName(lang))
+                        .font(DeAIDesign.font(12))
+                        .lineLimit(1)
+                    SkillLangChip(language: skill.language, lang: lang)
+                    if skill.isLong {
+                        Text(L10n.t(.skillLongWarning, lang))
+                            .font(DeAIDesign.font(9))
+                            .foregroundStyle(DeAIDesign.danger)
+                            .lineLimit(1)
+                    }
+                }
+                Text(
+                    L10n.f(
+                        .skillSize, lang, skill.body.count,
+                        skill.estimatedTokens
+                    )
+                )
+                .font(DeAIDesign.font(10).monospacedDigit())
+                .foregroundStyle(DeAIDesign.muted)
+            }
+            Spacer()
+            Button(L10n.t(.skillViewEdit, lang), action: onEdit)
+                .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+            if !skill.isBuiltin {
+                Button(action: onReveal) {
+                    Image(systemName: "folder")
+                        .font(DeAIDesign.font(11, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DeAIDesign.muted)
+                .help(L10n.t(.showInFinder, lang))
+                .accessibilityLabel(L10n.t(.showInFinder, lang))
+            }
+            if let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(DeAIDesign.font(11, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DeAIDesign.muted)
+                .help(L10n.t(.deleteTooltip, lang))
+                .accessibilityLabel(L10n.t(.deleteTooltip, lang))
+            }
+        }
+    }
+}
+
+/// Small language tag chip on a skill row (中文 / English / 通用).
+private struct SkillLangChip: View {
+    let language: SkillLanguage
+    var lang: UILanguage
+
+    var body: some View {
+        Text(language.displayName(lang))
+            .font(DeAIDesign.font(9))
+            .foregroundStyle(DeAIDesign.muted)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(
+                DeAIDesign.sidebar, in: DeAIDesign.pill
+            )
+            .overlay {
+                DeAIDesign.pill
+                    .strokeBorder(DeAIDesign.border, lineWidth: 0.5)
+            }
+    }
+}
+
+/// Skill selection control — plain Button + popover (system Menu renders
+/// black-on-dark; see AddProviderRow's note).
+private struct SkillPickButton: View {
+    let skills: [RewriteSkill]
+    @Binding var selection: String
+    var lang: UILanguage
+    @State private var open = false
+
+    private var current: RewriteSkill {
+        skills.first { $0.id == selection }
+            ?? skills.first { $0.isBuiltin }
+            ?? skills[0]
+    }
+
+    var body: some View {
+        Button { open = true } label: {
+            HStack(spacing: 6) {
+                Text(current.displayName(lang))
+                    .font(DeAIDesign.font(11))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(DeAIDesign.font(7, weight: .semibold))
+            }
+            .foregroundStyle(DeAIDesign.text)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                DeAIDesign.surface,
+                in: RoundedRectangle(
+                    cornerRadius: DeAIDesign.controlRadius
+                )
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                    .strokeBorder(DeAIDesign.border, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(current.displayName(lang))
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(skills) { skill in
+                    Button {
+                        selection = skill.id
+                        open = false
+                    } label: {
+                        SkillPickOptionRow(
+                            skill: skill,
+                            selected: skill.id == current.id,
+                            lang: lang
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(4)
+            .frame(minWidth: 220)
+            .background(DeAIDesign.background)
+        }
+    }
+}
+
+/// Popover row for the skill picker — hover highlight + checkmark +
+/// language chip.
+private struct SkillPickOptionRow: View {
+    let skill: RewriteSkill
+    var selected: Bool
+    var lang: UILanguage
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: selected ? "checkmark" : "")
+                .font(DeAIDesign.font(9, weight: .bold))
+                .frame(width: 12)
+            Text(skill.displayName(lang))
+                .font(DeAIDesign.font(12))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            SkillLangChip(language: skill.language, lang: lang)
+        }
+        .foregroundStyle(DeAIDesign.text)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                .fill(hovering ? DeAIDesign.sidebar : .clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+}
+
+/// View/edit sheet for one skill. Built-in: read-only + 复制为新技能.
+/// User skills: name/description/language/body editable + 保存.
+/// Internal (not private) so the debug showcase can render it directly.
+struct SkillEditSheet: View {
+    let skill: RewriteSkill
+    let store: RewriteSkillStore
+    /// Built-in copy-as-new → parent swaps the sheet's subject.
+    var onDuplicate: ((RewriteSkill) -> Void)? = nil
+
+    @Environment(\.deaiUILanguage) private var lang
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var desc: String
+    @State private var language: SkillLanguage
+    @State private var bodyText: String
+    @State private var error: String?
+
+    init(
+        skill: RewriteSkill, store: RewriteSkillStore,
+        onDuplicate: ((RewriteSkill) -> Void)? = nil
+    ) {
+        self.skill = skill
+        self.store = store
+        self.onDuplicate = onDuplicate
+        _name = State(initialValue: skill.name)
+        _desc = State(initialValue: skill.description)
+        _language = State(initialValue: skill.language)
+        _bodyText = State(initialValue: skill.body)
+        _error = State(initialValue: nil)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text(L10n.t(.skillNameLabel, lang))
+                    .frame(width: 84, alignment: .leading)
+                TextField(L10n.t(.skillNameLabel, lang), text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(skill.isBuiltin)
+            }
+            HStack(spacing: 8) {
+                Text(L10n.t(.skillDescLabel, lang))
+                    .frame(width: 84, alignment: .leading)
+                TextField(L10n.t(.skillDescLabel, lang), text: $desc)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(skill.isBuiltin)
+            }
+            HStack(spacing: 8) {
+                Text(L10n.t(.skillLanguageLabel, lang))
+                    .frame(width: 84, alignment: .leading)
+                ForEach(SkillLanguage.allCases, id: \.self) { l in
+                    Button {
+                        language = l
+                    } label: {
+                        Text(l.displayName(lang))
+                            .font(DeAIDesign.font(11))
+                            .foregroundStyle(
+                                language == l
+                                    ? DeAIDesign.text : DeAIDesign.muted
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background(
+                                language == l
+                                    ? DeAIDesign.surface : DeAIDesign.sidebar,
+                                in: DeAIDesign.pill
+                            )
+                            .overlay {
+                                DeAIDesign.pill.strokeBorder(
+                                    language == l
+                                        ? DeAIDesign.accent
+                                        : DeAIDesign.border,
+                                    lineWidth: 1
+                                )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(skill.isBuiltin)
+                }
+                Spacer()
+            }
+            TextEditor(text: $bodyText)
+                .font(.system(size: 12, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .background(
+                    DeAIDesign.sidebar,
+                    in: RoundedRectangle(
+                        cornerRadius: DeAIDesign.controlRadius
+                    )
+                )
+                .disabled(skill.isBuiltin)
+                .accessibilityLabel(L10n.t(.skillBodyLabel, lang))
+            HStack {
+                Text(
+                    L10n.f(
+                        .skillSize, lang, bodyText.count,
+                        RewriteSkillStore.estimatedTokens(bodyText)
+                    )
+                )
+                .font(DeAIDesign.font(10).monospacedDigit())
+                .foregroundStyle(
+                    bodyText.count > RewriteSkillStore.maxBodyLength
+                        ? DeAIDesign.danger : DeAIDesign.muted
+                )
+                if let error {
+                    Text(error)
+                        .font(DeAIDesign.font(10))
+                        .foregroundStyle(DeAIDesign.danger)
+                }
+                Spacer()
+            }
+            if skill.isBuiltin {
+                Text(L10n.t(.builtinReadonlyNote, lang))
+                    .font(DeAIDesign.font(10))
+                    .foregroundStyle(DeAIDesign.muted)
+            }
+            HStack {
+                if skill.isBuiltin {
+                    Button(L10n.t(.skillDuplicate, lang)) {
+                        onDuplicate?(store.duplicate(skill))
+                    }
+                    .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+                }
+                Spacer()
+                Button(L10n.t(.cancelButton, lang)) { dismiss() }
+                    .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+                if !skill.isBuiltin {
+                    Button(L10n.t(.saveButton, lang)) { save() }
+                        .buttonStyle(DeAIButtonStyle(compact: true))
+                        .disabled(
+                            name.trimmingCharacters(in: .whitespacesAndNewlines)
+                                .isEmpty
+                                || bodyText.count
+                                    > RewriteSkillStore.maxBodyLength
+                        )
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 520, height: 480)
+        .font(DeAIDesign.font())
+        .foregroundStyle(DeAIDesign.text)
+        .background(DeAIDesign.background)
+    }
+
+    private func save() {
+        // a deleted skill must not be re-created by a stray Save
+        guard store.skills.contains(where: { $0.id == skill.id }) else {
+            error = L10n.t(.skillDeleted, lang)
+            return
+        }
+        var updated = skill
+        updated.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.description = desc.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        updated.language = language
+        updated.body = bodyText
+        switch store.save(updated) {
+        case .success:
+            dismiss()
+        case .failure(let e):
+            switch e {
+            case .tooLarge(let size, let max):
+                error = L10n.f(.skillTooLarge, lang, size, max)
+            case .emptyName:
+                error = L10n.t(.errEmptyTerm, lang)
+            default:
+                error = L10n.t(.skillUnreadable, lang)
+            }
+        }
+    }
+}
+
 // MARK: - live preview
 
 /// Layer-backed preview that reuses `UnderlineDrawing` so the preview can
@@ -996,17 +1544,13 @@ private struct UnderlinePreview: NSViewRepresentable {
 
 // MARK: - 个人
 
-/// Personal lexicon + style notes. Entries persist to
+/// Personal lexicon only — the AI-only style half moved to the AI tab's
+/// 改写技能 section (RewriteSkillStore). Entries persist to
 /// `~/Library/Application Support/DeAI/lexicon.json` (watched for external
-/// edits); the style text lives in `style.md` next to it.
+/// edits).
 private struct PersonalSettingsTab: View {
     @ObservedObject var lexicon: PersonalLexiconStore
     @Environment(\.deaiUILanguage) private var lang
-
-    @State private var styleDraft = ""
-    /// Debounce for style.md writes (keystroke → save after a pause).
-    @State private var styleSaveTask: Task<Void, Never>?
-    @State private var confirmResetStyle = false
 
     var body: some View {
         SettingsTabScroll {
@@ -1038,73 +1582,11 @@ private struct PersonalSettingsTab: View {
                     Text(L10n.t(.lexiconCaption, lang))
                         .font(DeAIDesign.font(10))
                         .foregroundStyle(DeAIDesign.muted)
-                }
-            }
-            SettingsSection(L10n.t(.sectionStyle, lang)) {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextEditor(text: $styleDraft)
-                        .font(DeAIDesign.font(13))
-                        .lineSpacing(3)
-                        .scrollContentBackground(.hidden)
-                        .padding(10)
-                        .frame(height: 180)
-                        .background(
-                            DeAIDesign.sidebar,
-                            in: RoundedRectangle(
-                                cornerRadius: DeAIDesign.controlRadius
-                            )
-                        )
-                        .accessibilityLabel(L10n.t(.styleA11y, lang))
-                    HStack {
-                        Text("\(styleDraft.count)/\(PersonalLexiconStore.maxStyleLength)")
-                            .font(DeAIDesign.font(10).monospacedDigit())
-                            .foregroundStyle(
-                                styleDraft.count > PersonalLexiconStore.maxStyleLength
-                                    ? DeAIDesign.danger : DeAIDesign.muted
-                            )
-                        Spacer()
-                        Button(L10n.t(.restoreDefaults, lang)) { confirmResetStyle = true }
-                            .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
-                        Button(L10n.t(.showInFinder, lang)) {
-                            NSWorkspace.shared.activateFileViewerSelecting(
-                                [lexicon.fileToReveal]
-                            )
-                        }
-                        .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
-                    }
-                    Text(L10n.f(.styleCaption, lang, PersonalLexiconStore.maxStyleLength))
+                    Text(L10n.t(.lexiconSharedNote, lang))
                         .font(DeAIDesign.font(10))
                         .foregroundStyle(DeAIDesign.muted)
                 }
             }
-        }
-        .onAppear { styleDraft = lexicon.style }
-        // external edits via the file watcher land in lexicon.style
-        .onChange(of: lexicon.style) { _, new in
-            if new != styleDraft { styleDraft = new }
-        }
-        .onChange(of: styleDraft) { _, new in
-            styleSaveTask?.cancel()
-            styleSaveTask = Task {
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    if lexicon.style != new { lexicon.setStyle(new) }
-                }
-            }
-        }
-        .confirmationDialog(
-            L10n.t(.restoreStyleTitle, lang),
-            isPresented: $confirmResetStyle,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.t(.restoreDefaults, lang), role: .destructive) {
-                styleDraft = RewritePrompt.defaultStyle
-                lexicon.setStyle(styleDraft)
-            }
-            Button(L10n.t(.cancelButton, lang), role: .cancel) {}
-        } message: {
-            Text(L10n.t(.restoreStyleMessage, lang))
         }
     }
 

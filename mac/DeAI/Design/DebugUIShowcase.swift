@@ -386,10 +386,37 @@ final class DebugUICapture {
             _ = captureLexicon.addEntry(
                 kind: .avoid, term: "tapestry", match: .wholeWord
             )
+            // skills fixture: a temp-dir store with a realistic 25k-char
+            // skill so the 较长 warning badge shows
+            let skillsDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("deai-capture-skills-\(UUID().uuidString)",
+                                        isDirectory: true)
+            let captureSkills = RewriteSkillStore(
+                directory: skillsDir.appendingPathComponent("skills",
+                                                            isDirectory: true),
+                legacyStyleFile: skillsDir.appendingPathComponent("style.md")
+            )
+            _ = captureSkills.save(
+                RewriteSkill(
+                    id: "long-skill", name: "长技能示例",
+                    description: "", language: .any,
+                    body: String(repeating: "中文改写指导内容。", count: 3125),
+                    isBuiltin: false
+                )
+            )
+            _ = captureSkills.save(
+                RewriteSkill(
+                    id: "en-skill", name: "English only",
+                    description: "", language: .en,
+                    body: "Rewrite in a direct, plain style.",
+                    isBuiltin: false
+                )
+            )
             let captureSettings = AppSettings(
                 userDefaults: UserDefaults(suiteName: "deai.capture-personal")!,
                 secrets: InMemorySecretStore(),
-                lexicon: captureLexicon
+                lexicon: captureLexicon,
+                skills: captureSkills
             )
             // pin zh — a fresh suite would follow the machine's locale
             captureSettings.uiLanguage = .zh
@@ -397,7 +424,31 @@ final class DebugUICapture {
                  size: NSSize(width: 560, height: 660))
             try await save("settings-personal")
             scrollToBottom(in: window.contentView)
-            try await save("settings-personal-style")
+            try await save("settings-personal-scroll")
+            // AI tab scrolled to the skills section (25k warn badge)
+            show(SettingsView(settings: captureSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660))
+            scrollTo(fraction: 0.55, in: window.contentView)
+            try await save("settings-ai-skills")
+            scrollToBottom(in: window.contentView)
+            try await save("settings-ai-skills-list")
+            // skill edit sheet (user skill, editable)
+            if let longSkill = captureSkills.skills.first(where: {
+                $0.id == "long-skill"
+            }) {
+                show(SkillEditSheet(skill: longSkill, store: captureSkills),
+                     size: NSSize(width: 520, height: 480))
+                try await save("skill-sheet")
+                show(SkillEditSheet(skill: longSkill, store: captureSkills),
+                     size: NSSize(width: 520, height: 480), dark: true)
+                try await save("skill-sheet-dark")
+            }
+            // built-in sheet: read-only + 复制为新技能
+            if let builtin = captureSkills.skills.first {
+                show(SkillEditSheet(skill: builtin, store: captureSkills),
+                     size: NSSize(width: 520, height: 480))
+                try await save("skill-sheet-builtin")
+            }
             // rewrite panel states (mock model — same view the panel hosts)
             let rewriteModel = RewritePanelModel()
             rewriteModel.phase = .loading
@@ -440,6 +491,12 @@ final class DebugUICapture {
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit", initialTab: 2),
                  size: NSSize(width: 560, height: 660), dark: true)
             try await save("settings-ai-dark")
+            show(SettingsView(settings: captureSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            scrollTo(fraction: 0.55, in: window.contentView)
+            try await save("settings-ai-skills-dark")
+            scrollToBottom(in: window.contentView)
+            try await save("settings-ai-skills-list-dark")
             show(SettingsView(settings: controller.settings, currentBundleId: "com.apple.TextEdit",
                               initialTab: 2, hotkeyRecordingPreview: true),
                  size: NSSize(width: 560, height: 660), dark: true)
@@ -531,7 +588,8 @@ final class DebugUICapture {
             let enSettings = AppSettings(
                 userDefaults: UserDefaults(suiteName: "deai.capture-en")!,
                 secrets: InMemorySecretStore(),
-                lexicon: captureLexicon
+                lexicon: captureLexicon,
+                skills: captureSkills
             )
             enSettings.uiLanguage = .en
             show(SettingsView(settings: enSettings, currentBundleId: "com.apple.TextEdit"),
@@ -549,6 +607,23 @@ final class DebugUICapture {
             show(SettingsView(settings: enSettings, initialTab: 2),
                  size: NSSize(width: 560, height: 660), dark: true)
             try await save("settings-ai-en-dark")
+            // skills section in English (scrolled to it)
+            show(SettingsView(settings: enSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660))
+            scrollTo(fraction: 0.55, in: window.contentView)
+            try await save("settings-ai-skills-en")
+            scrollToBottom(in: window.contentView)
+            try await save("settings-ai-skills-list-en")
+            if let longSkillEn = captureSkills.skills.first(where: {
+                $0.id == "long-skill"
+            }) {
+                show(
+                    SkillEditSheet(skill: longSkillEn, store: captureSkills)
+                        .environment(\.deaiUILanguage, .en),
+                    size: NSSize(width: 520, height: 480)
+                )
+                try await save("skill-sheet-en")
+            }
             show(SettingsView(settings: enSettings, initialTab: 3),
                  size: NSSize(width: 560, height: 660))
             try await save("settings-personal-en")

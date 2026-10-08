@@ -59,7 +59,8 @@ extension Error {
 /// Never log the API key or the rewrite text — lengths and statuses only.
 struct LLMClient {
     var session: URLSession = .shared
-    var timeout: TimeInterval = 60
+    /// 120s: large rewrite skills make prompts (and responses) slow.
+    var timeout: TimeInterval = 120
 
     private static var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String

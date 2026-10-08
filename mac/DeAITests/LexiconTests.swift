@@ -58,7 +58,6 @@ final class PersonalLexiconStoreTests: XCTestCase {
         _ = try store.addEntry(
             kind: .keep, term: "ACME", match: .wholeWord, note: "产品名"
         ).get()
-        store.setStyle("我的风格")
 
         let reloaded = PersonalLexiconStore(directory: tempDir)
         XCTAssertEqual(reloaded.entries.count, 3)
@@ -69,7 +68,6 @@ final class PersonalLexiconStoreTests: XCTestCase {
             reloaded.entries.first { $0.kind == .keep }?.match, .wholeWord
         )
         XCTAssertEqual(reloaded.entries.first { $0.kind == .keep }?.note, "产品名")
-        XCTAssertEqual(reloaded.style, "我的风格")
     }
 
     /// Regression: the directory watcher alone misses in-place (non-atomic)
@@ -146,21 +144,6 @@ final class PersonalLexiconStoreTests: XCTestCase {
         _ = try s.addEntry(kind: .keep, term: "x").get()
         let s2 = PersonalLexiconStore(directory: tempDir)
         XCTAssertEqual(s2.entries.map(\.term), ["x"])
-    }
-
-    func testCorruptStyleIsRenamed() throws {
-        let url = tempDir.appendingPathComponent("style.md")
-        try Data([0xFF, 0xFE, 0x01]).write(to: url)
-        let s = PersonalLexiconStore(directory: tempDir)
-        XCTAssertEqual(s.style, RewritePrompt.defaultStyle)
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: tempDir, includingPropertiesForKeys: nil
-        )
-        XCTAssertTrue(
-            contents.contains {
-                $0.lastPathComponent.hasPrefix("style.corrupt-")
-            }
-        )
     }
 
     func testDraftRowsAndValidityFilter() {
@@ -485,7 +468,11 @@ final class RewritePromptLexiconTests: XCTestCase {
     }
 
     func testSystemPromptComposition() {
-        let sys = RewritePrompt.system(style: "自定义风格")
+        let skill = RewriteSkill(
+            id: "t", name: "t", description: "", language: .any,
+            body: "自定义风格", isBuiltin: false
+        )
+        let sys = RewritePrompt.system(skill: skill)
         XCTAssertTrue(sys.hasPrefix(RewritePrompt.safetyBlock))
         XCTAssertTrue(sys.contains("写作风格与偏好（用户自定义）：\n自定义风格"))
         // default style keeps the old rule-4/6 semantics
@@ -495,12 +482,20 @@ final class RewritePromptLexiconTests: XCTestCase {
         XCTAssertTrue(RewritePrompt.safetyBlock.contains("输出格式"))
     }
 
-    func testStyleTruncatedAtLimit() {
-        let long = String(repeating: "字", count: 5000)
-        let sys = RewritePrompt.system(style: long)
-        XCTAssertTrue(
-            sys.count <= RewritePrompt.safetyBlock.count + 4000 + 20
+    func testSkillBodyTruncatedAtLimit() {
+        let long = String(repeating: "字", count: 70_000)
+        let skill = RewriteSkill(
+            id: "t", name: "t", description: "", language: .any,
+            body: long, isBuiltin: false
         )
+        let sys = RewritePrompt.system(skill: skill)
+        // header + trailing reminder add ~100 chars over the body cap
+        XCTAssertTrue(
+            sys.count
+                <= RewritePrompt.safetyBlock.count
+                    + RewriteSkillStore.maxBodyLength + 200
+        )
+        XCTAssertFalse(sys.contains(String(repeating: "字", count: 60_001)))
     }
 }
 

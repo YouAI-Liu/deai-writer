@@ -131,17 +131,13 @@ enum L10n {
         case reservedCombo
         case recorderA11y
         case hotkeyNotSet
-        // personal tab
+        // personal tab (词库)
         case sectionLexicon
         case addEntry
         case lexiconCaption
-        case sectionStyle
-        case styleA11y
-        case restoreStyleTitle
-        case restoreStyleMessage
+        case lexiconSharedNote
         case cancelButton
         case showInFinder
-        case styleCaption      // %d char cap
         case kindLabel
         case termPlaceholder
         case replacePlaceholder
@@ -156,6 +152,32 @@ enum L10n {
         case errEmptyTerm
         case errTermTooLong    // %d max chars
         case errDuplicate
+        // rewrite skills (AI tab section)
+        case sectionSkills
+        case safetyDisclosure
+        case skillForZh
+        case skillForEn
+        case skillImport
+        case skillBuiltinName
+        case migratedSkillName
+        case skillLangZh
+        case skillLangEn
+        case skillLangAny
+        case skillSize          // %d chars, ~%d tokens
+        case skillLongWarning
+        case skillViewEdit
+        case skillDuplicate
+        case builtinReadonlyNote
+        case skillDeleteTitle   // %@ skill name
+        case skillDeleteMessage
+        case skillTooLarge      // %d actual, %d max
+        case skillNotMarkdown
+        case skillUnreadable
+        case skillDeleted
+        case skillNameLabel
+        case skillDescLabel
+        case skillBodyLabel
+        case skillLanguageLabel
         // menu-bar panel
         case menuAutoUnderline
         case menuCheckInApp    // %@ app name
@@ -248,7 +270,7 @@ enum L10n {
         .tabCheck: "检查",
         .tabUnderline: "下划线外观",
         .tabAI: "AI 改写",
-        .tabPersonal: "个人",
+        .tabPersonal: "词库",
 
         .languageRow: "语言 / Language",
         .sectionCategories: "检查类别",
@@ -355,13 +377,9 @@ enum L10n {
         .sectionLexicon: "词库",
         .addEntry: "添加词条",
         .lexiconCaption: "替换与避免会产生个人偏好下划线；保留词会盖住同位置的其他提示。",
-        .sectionStyle: "风格说明",
-        .styleA11y: "风格说明",
-        .restoreStyleTitle: "恢复默认风格说明？",
-        .restoreStyleMessage: "当前的自定义风格说明将被覆盖。",
+        .lexiconSharedNote: "词库同时用于本地检查和 AI 改写。",
         .cancelButton: "取消",
         .showInFinder: "在 Finder 中显示",
-        .styleCaption: "随 AI 改写提示一起发送；封顶 %d 字。",
         .kindLabel: "类型",
         .termPlaceholder: "原词",
         .replacePlaceholder: "替换为",
@@ -376,6 +394,32 @@ enum L10n {
         .errEmptyTerm: "词条不能为空",
         .errTermTooLong: "词条最长 %d 字",
         .errDuplicate: "重复的词条",
+
+        .sectionSkills: "改写技能",
+        .safetyDisclosure: "安全规则（固定，不可修改）",
+        .skillForZh: "中文文本使用",
+        .skillForEn: "英文文本使用",
+        .skillImport: "导入技能…",
+        .skillBuiltinName: "去 AI 味（默认）",
+        .migratedSkillName: "我的风格（已迁移）",
+        .skillLangZh: "中文",
+        .skillLangEn: "英文",
+        .skillLangAny: "通用",
+        .skillSize: "%d 字 · 约 %d tokens",
+        .skillLongWarning: "较长：每次改写会更慢、更贵",
+        .skillViewEdit: "查看/编辑",
+        .skillDuplicate: "复制为新技能",
+        .builtinReadonlyNote: "内置技能为只读",
+        .skillDeleteTitle: "删除技能「%@」？",
+        .skillDeleteMessage: "该技能文件将从磁盘中删除。",
+        .skillTooLarge: "技能正文 %d 字，超过上限 %d 字",
+        .skillNotMarkdown: "请选择 .md 文件或包含 SKILL.md 的文件夹",
+        .skillUnreadable: "无法读取所选文件",
+        .skillDeleted: "该技能已不存在，无法保存",
+        .skillNameLabel: "名称",
+        .skillDescLabel: "描述",
+        .skillBodyLabel: "正文",
+        .skillLanguageLabel: "语言",
 
         .menuAutoUnderline: "自动下划线",
         .menuCheckInApp: "在 %@ 中检查",
@@ -466,7 +510,7 @@ enum L10n {
         .tabCheck: "Check",
         .tabUnderline: "Underlines",
         .tabAI: "AI Rewrite",
-        .tabPersonal: "Personal",
+        .tabPersonal: "Lexicon",
 
         .languageRow: "语言 / Language",
         .sectionCategories: "Categories",
@@ -573,13 +617,9 @@ enum L10n {
         .sectionLexicon: "Lexicon",
         .addEntry: "Add Entry",
         .lexiconCaption: "Replace and avoid entries produce personal-preference underlines; keep entries hide other hints at the same spot.",
-        .sectionStyle: "Style Notes",
-        .styleA11y: "Style notes",
-        .restoreStyleTitle: "Restore default style notes?",
-        .restoreStyleMessage: "Your custom style notes will be overwritten.",
+        .lexiconSharedNote: "The lexicon is used by both local checking and AI rewrite.",
         .cancelButton: "Cancel",
         .showInFinder: "Show in Finder",
-        .styleCaption: "Sent with every AI rewrite prompt; capped at %d characters.",
         .kindLabel: "Kind",
         .termPlaceholder: "Term",
         .replacePlaceholder: "Replacement",
@@ -594,6 +634,32 @@ enum L10n {
         .errEmptyTerm: "Term can't be empty",
         .errTermTooLong: "Term can be at most %d characters",
         .errDuplicate: "Duplicate entry",
+
+        .sectionSkills: "Rewrite Skills",
+        .safetyDisclosure: "Safety rules (fixed, read-only)",
+        .skillForZh: "For Chinese text",
+        .skillForEn: "For English text",
+        .skillImport: "Import Skill…",
+        .skillBuiltinName: "De-AI (default)",
+        .migratedSkillName: "My style (migrated)",
+        .skillLangZh: "Chinese",
+        .skillLangEn: "English",
+        .skillLangAny: "Universal",
+        .skillSize: "%d chars · ~%d tokens",
+        .skillLongWarning: "Long: each rewrite is slower and costlier",
+        .skillViewEdit: "View/Edit",
+        .skillDuplicate: "Duplicate as New Skill",
+        .builtinReadonlyNote: "Built-in skills are read-only",
+        .skillDeleteTitle: "Delete skill “%@”?",
+        .skillDeleteMessage: "The skill file will be removed from disk.",
+        .skillTooLarge: "Skill body is %d chars; the limit is %d",
+        .skillNotMarkdown: "Choose a .md file or a folder containing SKILL.md",
+        .skillUnreadable: "Could not read the selected file",
+        .skillDeleted: "This skill no longer exists",
+        .skillNameLabel: "Name",
+        .skillDescLabel: "Description",
+        .skillBodyLabel: "Body",
+        .skillLanguageLabel: "Language",
 
         .menuAutoUnderline: "Auto-underline",
         .menuCheckInApp: "Check in %@",

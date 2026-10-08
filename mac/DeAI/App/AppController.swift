@@ -1315,7 +1315,13 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             lexicon: settings.lexicon.entries
         )
         let apiKey = settings.secrets.get(provider.id.uuidString)
-        let systemPrompt = RewritePrompt.system(style: settings.lexicon.style)
+        // Skill selection follows the text's detected language: zh texts
+        // pick from zh|any skills, en texts from en|any.
+        let rewriteLang = RewriteLanguageDetect.language(of: ctx.original)
+        let skillId = rewriteLang == .zh
+            ? settings.rewriteSkillZh : settings.rewriteSkillEn
+        let skill = settings.skills.resolved(id: skillId, for: rewriteLang)
+        let systemPrompt = RewritePrompt.system(skill: skill)
         rewriteTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
