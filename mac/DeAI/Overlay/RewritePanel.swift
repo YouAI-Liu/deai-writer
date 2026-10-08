@@ -193,7 +193,20 @@ struct RewritePanelView: View {
                 labeled(L10n.t(.originalLabel, lang), text: model.original, muted: true)
                 Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
                 labeled(L10n.t(.rewriteLabel, lang), text: model.result, muted: false)
-                if !model.rememberPairs.isEmpty { rememberBlock }
+                switch RewriteDiff.rememberSection(
+                    changed: model.result != model.original,
+                    pairs: model.rememberPairs
+                ) {
+                case .list:
+                    rememberBlock
+                case .note:
+                    // changed but unsplittable — say so instead of hiding
+                    Text(L10n.t(.rememberTooLarge, lang))
+                        .font(DeAIDesign.font(11))
+                        .foregroundStyle(DeAIDesign.muted)
+                case .hidden:
+                    EmptyView()
+                }
                 HStack(spacing: 16) {
                     Button(L10n.t(.replaceButton, lang)) { model.onAccept() }
                         .keyboardShortcut(.defaultAction)

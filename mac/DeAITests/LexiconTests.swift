@@ -537,6 +537,39 @@ final class RewriteDiffTests: XCTestCase {
         )
     }
 
+    /// 记住改法 section selection: pairs → list, changed-but-empty → note,
+    /// unchanged → hidden.
+    func testRememberSectionState() {
+        let pair = RewriteDiff.Pair(from: "a", to: "b")
+        XCTAssertEqual(
+            RewriteDiff.rememberSection(changed: true, pairs: [pair]),
+            .list
+        )
+        XCTAssertEqual(
+            RewriteDiff.rememberSection(changed: false, pairs: [pair]),
+            .list
+        )
+        XCTAssertEqual(
+            RewriteDiff.rememberSection(changed: true, pairs: []),
+            .note
+        )
+        XCTAssertEqual(
+            RewriteDiff.rememberSection(changed: false, pairs: []),
+            .hidden
+        )
+        // whole-phrase rewrite: every change block exceeds maxLen → the
+        // list is empty even though the text changed → note
+        let long = RewriteDiff.wordPairs(
+            original: String(repeating: "甲", count: 30),
+            result: String(repeating: "乙", count: 30)
+        )
+        XCTAssertTrue(long.isEmpty)
+        XCTAssertEqual(
+            RewriteDiff.rememberSection(changed: true, pairs: long),
+            .note
+        )
+    }
+
     func testInsertionAndDeletion() {
         let ins = RewriteDiff.wordPairs(original: "ab", result: "ab cd")
         XCTAssertTrue(ins.contains { $0.from.isEmpty && $0.to == "cd" })

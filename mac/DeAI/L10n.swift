@@ -227,6 +227,7 @@ enum L10n {
         case pairDelete        // %@ deleted text
         case pairReplace       // %@ from, %@ to
         case addToLexicon
+        case rememberTooLarge
         // rewrite errors (LLMClient + controller)
         case errorTooLong      // %d max chars
         case errorConfigureAI
@@ -469,6 +470,7 @@ enum L10n {
         .pairDelete: "删除「%@」",
         .pairReplace: "「%@」→「%@」",
         .addToLexicon: "加入词库",
+        .rememberTooLarge: "改动较大，无法拆成单个词语加入词库",
 
         .errorTooLong: "选中内容过长（上限 %d 字）",
         .errorConfigureAI: "请先在设置中配置 AI 服务",
@@ -709,6 +711,7 @@ enum L10n {
         .pairDelete: "Delete “%@”",
         .pairReplace: "“%@” → “%@”",
         .addToLexicon: "Add to Lexicon",
+        .rememberTooLarge: "Changes are too large to split into individual words for the lexicon",
 
         .errorTooLong: "Selection is too long (max %d characters)",
         .errorConfigureAI: "Set up an AI service in Settings first",

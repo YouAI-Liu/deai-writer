@@ -164,4 +164,24 @@ enum RewriteDiff {
         }
         return pairs
     }
+
+    /// What the rewrite panel's 记住改法 section shows.
+    enum RememberSectionState: Equatable {
+        /// No checkbox list and no note — the rewrite was identical.
+        case hidden
+        /// Text changed but every diff block was unsplittable — a muted
+        /// one-line note instead of the (empty) checkbox list.
+        case note
+        /// Usable pairs → the expandable checkbox list + 加入词库.
+        case list
+    }
+
+    /// Section selection: any usable pair → list; a changed text with no
+    /// usable pairs → note; nothing changed → hidden.
+    static func rememberSection(
+        changed: Bool, pairs: [Pair]
+    ) -> RememberSectionState {
+        if !pairs.isEmpty { return .list }
+        return changed ? .note : .hidden
+    }
 }

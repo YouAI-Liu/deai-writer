@@ -473,6 +473,12 @@ final class DebugUICapture {
             rewriteModel.rememberChecked = []
             rewriteModel.phase = .noChange
             try await save("rewrite-nochange")
+            // changed text with no splittable pairs → muted note instead
+            // of an empty 记住改法 section
+            rewriteModel.phase = .result
+            rewriteModel.rememberPairs = []
+            rewriteModel.rememberChecked = []
+            try await save("rewrite-note")
             show(PermissionView(), size: NSSize(width: 420, height: 360))
             try await save("permission")
             show(MenuContent(controller: controller), size: NSSize(width: 300, height: 270))
@@ -665,6 +671,11 @@ final class DebugUICapture {
             show(rewriteStage(rewriteModel, dark: true, height: 560),
                  size: NSSize(width: 620, height: 560), dark: true)
             try await save("rewrite-remember-en-dark")
+            rewriteModel.rememberExpanded = false
+            rewriteModel.rememberPairs = []
+            rewriteModel.rememberChecked = []
+            show(rewriteStage(rewriteModel), size: NSSize(width: 620, height: 420))
+            try await save("rewrite-note-en")
 
             show(MenuContent(controller: controller, groupsExpanded: true,
                              settings: enSettings),

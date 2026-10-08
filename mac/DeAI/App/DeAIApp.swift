@@ -39,15 +39,60 @@ struct DeAIApp: App {
         }
         .menuBarExtraStyle(.window)
         Window(L10n.t(.windowRuleTest, appDelegate.controller.settings.uiLanguage), id: "debug") {
-            LanguageScoped { ContentView() }
+            LanguageScoped {
+                ContentView()
+                    .background(LocalizedWindowTitle(key: .windowRuleTest))
+            }
                 .environmentObject(appDelegate.controller.settings)
         }
         #if DEBUG
         Window(L10n.t(.menuUIPreview, appDelegate.controller.settings.uiLanguage), id: "ui-preview") {
-            LanguageScoped { DebugUIShowcase() }
+            LanguageScoped {
+                DebugUIShowcase()
+                    .background(LocalizedWindowTitle(key: .menuUIPreview))
+            }
                 .environmentObject(appDelegate.controller.settings)
         }
         #endif
+    }
+}
+
+/// SwiftUI `Window` scene titles are read once when the scene is created,
+/// so an already-open window keeps the old language's title. This
+/// zero-size NSView sits in the scene content — `updateNSView` re-runs on
+/// every re-render, so the env-driven language change retitles it live.
+private struct LocalizedWindowTitle: View {
+    let key: L10n.Key
+    @Environment(\.deaiUILanguage) private var lang
+
+    var body: some View {
+        WindowTitleSync(title: L10n.t(key, lang))
+    }
+}
+
+private struct WindowTitleSync: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context: Context) -> WindowTitleView {
+        WindowTitleView()
+    }
+
+    func updateNSView(_ nsView: WindowTitleView, context: Context) {
+        nsView.desiredTitle = title
+    }
+}
+
+private final class WindowTitleView: NSView {
+    var desiredTitle = "" {
+        didSet { apply() }
+    }
+
+    override func viewDidMoveToWindow() { apply() }
+
+    private func apply() {
+        if let window, window.title != desiredTitle {
+            window.title = desiredTitle
+        }
     }
 }
 
