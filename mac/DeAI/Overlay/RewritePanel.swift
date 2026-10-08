@@ -47,6 +47,8 @@ final class RewritePanel {
     let model = RewritePanelModel()
 
     private var panel: NSPanel?
+    private var preferredTopLeft = CGPoint.zero
+    private var anchorScreen: NSScreen?
     private var escMonitor: Any?
     private var globalEscMonitor: Any?
     private var outsideMonitor: Any?
@@ -63,6 +65,9 @@ final class RewritePanel {
         dismiss()
         let view = RewritePanelView(model: model)
         let host = NSHostingView(rootView: view)
+        // The panel owns its size; SwiftUI must not grow the window by
+        // changing its minimum size before our anchored refit runs.
+        host.sizingOptions = [.intrinsicContentSize]
         host.setFrameSize(host.fittingSize)
 
         let panel = NSPanel(
@@ -86,19 +91,17 @@ final class RewritePanel {
             x: rect.minX,
             y: rect.minY - host.fittingSize.height - 6
         )
-        if let screen = NSScreen.screens.first(where: {
+        anchorScreen = NSScreen.screens.first(where: {
             $0.frame.contains(rect.origin)
-        }) ?? NSScreen.main {
+        }) ?? NSScreen.main
+        if let screen = anchorScreen {
             let f = screen.visibleFrame
             if origin.y < f.minY {
                 origin.y = rect.maxY + 6
             }
-            origin.x = min(
-                max(origin.x, f.minX + 4),
-                f.maxX - host.fittingSize.width - 4
-            )
         }
-        panel.setFrameOrigin(origin)
+        preferredTopLeft = CGPoint(x: origin.x, y: origin.y + host.fittingSize.height)
+        panel.setFrame(fittedFrame(size: host.fittingSize), display: false)
         panel.orderFront(nil)
         self.panel = panel
         modelCancellable = model.objectWillChange.sink { [weak self] _ in
@@ -128,17 +131,26 @@ final class RewritePanel {
         }
     }
 
-    /// Phase transitions resize the content — refit, keeping the top edge
-    /// pinned so the panel grows downward from its anchor.
+    private func fittedFrame(size: NSSize) -> CGRect {
+        var frame = CGRect(
+            x: preferredTopLeft.x, y: preferredTopLeft.y - size.height,
+            width: size.width, height: size.height
+        )
+        if let visible = anchorScreen?.visibleFrame {
+            frame.origin.x = min(max(frame.minX, visible.minX + 4),
+                                 visible.maxX - size.width - 4)
+            frame.origin.y = min(max(frame.minY, visible.minY + 4),
+                                 visible.maxY - size.height - 4)
+        }
+        return frame
+    }
+
+    /// Refit from the saved top edge, moving only as needed to stay on screen.
     private func refit() {
         guard let panel, let host = panel.contentView as? NSHostingView<RewritePanelView>
         else { return }
         host.layout()
-        let fit = host.fittingSize
-        var f = panel.frame
-        f.origin.y = f.maxY - fit.height
-        f.size = fit
-        panel.setFrame(f, display: true)
+        panel.setFrame(fittedFrame(size: host.fittingSize), display: true)
     }
 
     func update() {
@@ -164,6 +176,20 @@ final class RewritePanel {
 struct RewritePanelView: View {
     @ObservedObject var model: RewritePanelModel
     private var lang: UILanguage { model.lang }
+    private static let panelWidth: CGFloat = 420
+    private static let contentPadding: CGFloat = 22
+
+    /// The panel fits its content, so a ScrollView needs a concrete viewport.
+    /// Reserve room for its scrollbar and match the 13pt body font.
+    static func textViewportHeight(_ text: String) -> CGFloat {
+        let bounds = (text as NSString).boundingRect(
+            with: NSSize(width: panelWidth - contentPadding * 2 - 12,
+                         height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: NSFont.systemFont(ofSize: 13)]
+        )
+        return min(160, max(20, ceil(bounds.height) + 4))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -254,8 +280,8 @@ struct RewritePanelView: View {
                 }
             }
         }
-        .padding(22)
-        .frame(width: 420)
+        .padding(Self.contentPadding)
+        .frame(width: Self.panelWidth)
         .background(DeAIDesign.background, in: RoundedRectangle(cornerRadius: DeAIDesign.radius))
         .clipShape(RoundedRectangle(cornerRadius: DeAIDesign.radius))
         .overlay {
@@ -275,9 +301,8 @@ struct RewritePanelView: View {
     private var rememberBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                withAnimation(DeAIDesign.motion(false)) {
-                    model.rememberExpanded.toggle()
-                }
+                // Match the native panel's immediate resize when content changes.
+                model.rememberExpanded.toggle()
             } label: {
                 HStack(spacing: 4) {
                     Image(
@@ -356,8 +381,11 @@ struct RewritePanelView: View {
                     .foregroundStyle(muted ? DeAIDesign.secondaryText : DeAIDesign.text)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 2)
             }
-            .frame(maxHeight: 160)
+            .frame(height: Self.textViewportHeight(text))
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

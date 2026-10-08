@@ -79,6 +79,20 @@ pub trait Rule: Send + Sync {
     fn check(&self, ctx: &Ctx) -> Vec<Finding>;
 }
 
+/// Numeric ranges use the nearest non-whitespace characters on each side.
+pub(crate) fn is_numeric_range(text: &str, range: Range<usize>) -> bool {
+    let digit = |c: char| c.is_ascii_digit() || matches!(c, '０'..='９');
+    text[..range.start]
+        .chars()
+        .rev()
+        .find(|c| !c.is_whitespace())
+        .is_some_and(digit)
+        && text[range.end..]
+            .chars()
+            .find(|c| !c.is_whitespace())
+            .is_some_and(digit)
+}
+
 /// All rules, ordered so that each category's entries appear in spec order.
 pub fn all() -> Vec<Box<dyn Rule>> {
     let mut v: Vec<Box<dyn Rule>> = Vec::new();

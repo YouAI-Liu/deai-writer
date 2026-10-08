@@ -82,6 +82,30 @@ final class DeAITests: XCTestCase {
         XCTAssertEqual(ids(3), ["zh.banned_opener", "zh.dash", "zh.fanan_loose"])
     }
 
+    func testCloudQASampleFindings() {
+        let text = "值得注意的是，我们需要赋能团队。"
+        let checker = Checker()
+        // RULES.md Z1 exempts the first qualifying paragraph; there is no
+        // built-in Chinese vocabulary rule for “赋能”, at any sensitivity.
+        for sensitivity: UInt8 in 1...3 {
+            XCTAssertTrue(checker.check(
+                text: text, opts: options(sensitivity: sensitivity)
+            ).isEmpty)
+        }
+        // The exact same sentence in a second qualifying paragraph does
+        // trigger the tier-1 zero-anaphor rule (LF and TextEdit's CR).
+        for separator in ["\n", "\r"] {
+            let prefixed = "团队已经完成第一轮测试。" + separator + text
+            let findings = checker.check(text: prefixed, opts: options())
+            XCTAssertEqual(findings.map(\.ruleId), ["zh.zero_anaphor"])
+            XCTAssertEqual(findings.first?.tier, 1)
+            XCTAssertEqual(findings.first.map { slice(prefixed, $0) }, "值得注意")
+        }
+        XCTAssertEqual(checker.check(
+            text: "说白了，" + text, opts: options()
+        ).map(\.ruleId), ["zh.banned_opener"])
+    }
+
     /// The exact text used for the live overlay QA screenshots — sanity
     /// check that it really triggers markdown + zh + grammar findings.
     func testLiveQATextFindings() {
@@ -104,6 +128,117 @@ final class DeAITests: XCTestCase {
 }
 
 // MARK: - TextGeometry pure parts
+
+@MainActor
+final class CloudQAViewTests: XCTestCase {
+    private static var liveWindows: [NSWindow] = []
+
+    private func host<V: View>(_ view: V) -> NSView {
+        let hosting = NSHostingView(rootView: view)
+        let size = hosting.fittingSize
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.display()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        hosting.layoutSubtreeIfNeeded()
+        Self.liveWindows.append(window)
+        return hosting
+    }
+
+    private func descendants<T: NSView>(_ view: NSView, of type: T.Type) -> [T] {
+        ((view as? T).map { [$0] } ?? [])
+            + view.subviews.flatMap { descendants($0, of: type) }
+    }
+
+    func testBuiltinHasNoEditableTextViews() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qa-readonly-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = RewriteSkillStore(baseDirectory: directory)
+        let builtin = host(SkillEditSheet(skill: RewriteSkillStore.builtin, store: store))
+        XCTAssertFalse(descendants(builtin, of: NSTextView.self).contains { $0.isEditable })
+        XCTAssertFalse(descendants(builtin, of: NSTextField.self).contains { $0.isEditable })
+        let copy = store.duplicate(RewriteSkillStore.builtin, language: .en)
+        let editable = host(SkillEditSheet(skill: copy, store: store))
+        XCTAssertTrue(descendants(editable, of: NSTextView.self).contains { $0.isEditable })
+    }
+
+    func testRewriteOriginalFitsAndLongTextsScrollToEnd() throws {
+        let model = RewritePanelModel()
+        model.lang = .en
+        model.phase = .result
+        model.original = "It is worth noting that we need to leverage synergies and delve into this."
+        model.result = "The team will review this together."
+        let shortView = host(RewritePanelView(model: model))
+        let shortScrolls = descendants(shortView, of: NSScrollView.self)
+        XCTAssertEqual(shortScrolls.count, 2)
+        for scroll in shortScrolls {
+            let document = try XCTUnwrap(scroll.documentView)
+            XCTAssertLessThanOrEqual(document.bounds.height,
+                                     scroll.contentView.bounds.height + 1)
+        }
+        model.original = String(repeating: model.original + " ", count: 20)
+        model.result = String(repeating: model.result + " ", count: 20)
+        let longView = host(RewritePanelView(model: model))
+        let longScrolls = descendants(longView, of: NSScrollView.self)
+        XCTAssertEqual(longScrolls.count, 2)
+        for scroll in longScrolls {
+            let document = try XCTUnwrap(scroll.documentView)
+            XCTAssertEqual(scroll.contentView.bounds.height, 160, accuracy: 1)
+            XCTAssertGreaterThan(document.bounds.height, scroll.contentView.bounds.height)
+            let bottom = document.bounds.height - scroll.contentView.bounds.height
+            document.scroll(NSPoint(x: 0, y: bottom))
+            XCTAssertEqual(scroll.contentView.bounds.maxY, document.bounds.maxY, accuracy: 1)
+        }
+    }
+
+    func testRewritePanelStaysOnScreenThroughStateChanges() throws {
+        let screen = try XCTUnwrap(NSScreen.main).visibleFrame
+        let rewrite = RewritePanel()
+        defer { rewrite.dismiss() }
+        for y in [screen.maxY - 140, screen.minY + 20] {
+            rewrite.model.lang = .en
+            rewrite.model.phase = .loading
+            rewrite.model.original = String(repeating: "The team will review the findings and complete the next round of testing. ", count: 20)
+            rewrite.model.result = ""
+            rewrite.model.rememberPairs = []
+            rewrite.model.rememberExpanded = false
+            rewrite.show(near: CGRect(x: screen.maxX - 100, y: y, width: 60, height: 20))
+            let window = try XCTUnwrap(NSApp.windows.first {
+                $0 is NSPanel && $0.contentView is NSHostingView<RewritePanelView> && $0.isVisible
+            })
+            window.orderOut(nil)
+            Self.liveWindows.append(window)
+            let initialTop = window.frame.maxY
+            rewrite.model.phase = .result
+            rewrite.model.result = rewrite.model.original + "The review is complete."
+            rewrite.update()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            XCTAssertLessThanOrEqual(window.frame.maxY, screen.maxY)
+            XCTAssertGreaterThanOrEqual(window.frame.minY, screen.minY)
+            XCTAssertGreaterThanOrEqual(window.frame.minX, screen.minX)
+            XCTAssertLessThanOrEqual(window.frame.maxX, screen.maxX)
+            if y == screen.maxY - 140 {
+                XCTAssertEqual(window.frame.maxY, initialTop, accuracy: 1)
+            }
+            rewrite.model.rememberPairs = [RewriteDiff.Pair(from: "review", to: "check")]
+            rewrite.model.rememberExpanded = true
+            rewrite.update()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            XCTAssertLessThanOrEqual(window.frame.maxY, screen.maxY)
+            XCTAssertGreaterThanOrEqual(window.frame.minY, screen.minY)
+            rewrite.model.rememberExpanded = false
+            rewrite.model.phase = .noChange
+            rewrite.update()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            XCTAssertLessThanOrEqual(window.frame.maxY, screen.maxY)
+            XCTAssertGreaterThanOrEqual(window.frame.minY, screen.minY)
+            rewrite.dismiss()
+        }
+    }
+}
 
 final class TextGeometryTests: XCTestCase {
     private func mkFinding(_ s: UInt32, _ e: UInt32) -> Finding {

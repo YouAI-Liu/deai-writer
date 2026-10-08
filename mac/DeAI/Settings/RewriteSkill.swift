@@ -370,11 +370,19 @@ final class RewriteSkillStore: ObservableObject {
 
     /// A built-in "复制为新技能": copies the body into a fresh user skill.
     @discardableResult
-    func duplicate(_ skill: RewriteSkill) -> RewriteSkill {
+    func duplicate(_ skill: RewriteSkill, language: UILanguage = .zh) -> RewriteSkill {
         let id = uniqueId(for: skill.name.isEmpty ? "skill" : skill.name)
+        let baseName = L10n.f(.skillCopyName, language, skill.displayName(language))
+        let takenNames = Set(skills.map { $0.displayName(language) })
+        var name = baseName
+        var number = 2
+        while takenNames.contains(name) {
+            name = "\(baseName) \(number)"
+            number += 1
+        }
         let copy = RewriteSkill(
             id: id,
-            name: skill.displayName(.zh) + " 副本",
+            name: name,
             description: skill.description,
             language: skill.language,
             body: skill.body,

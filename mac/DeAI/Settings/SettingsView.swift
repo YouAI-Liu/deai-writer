@@ -657,6 +657,8 @@ private struct AISettingsTab: View {
                 skill: skill, store: settings.skills,
                 onDuplicate: { copy in editingSkill = copy }
             )
+            .id(skill.id)
+            .environment(\.deaiUILanguage, lang)
         }
     }
 
@@ -674,17 +676,14 @@ private struct AISettingsTab: View {
                 HStack {
                     Text(L10n.t(.formatLabel, lang))
                     Spacer()
-                    Picker(
-                        L10n.t(.formatLabel, lang),
+                    SettingsPickButton(
+                        label: L10n.t(.formatLabel, lang),
                         selection: providerBinding(
                             p.id, \.format, fallback: .openAIChat
-                        )
-                    ) {
-                        ForEach(APIFormat.allCases, id: \.self) { f in
-                            Text(f.label).tag(f)
-                        }
-                    }
-                    .labelsHidden()
+                        ),
+                        options: APIFormat.allCases,
+                        optionLabel: { $0.label }
+                    )
                     .frame(width: 280)
                     // OpenCode Go derives the format from the chosen model
                     .disabled(p.preset == .opencodeGo && !customModel)
@@ -715,17 +714,21 @@ private struct AISettingsTab: View {
                         onCommit: saveKey
                     )
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
+                    .frame(minWidth: 120, maxWidth: 200)
                     Button(L10n.t(.saveButton, lang)) { saveKey() }
                         .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                         .disabled(keyDraft.isEmpty)
+                        .fixedSize()
                     if keySaved && keyDraft.isEmpty {
                         Button(L10n.t(.clearButton, lang)) { clearKey() }
                             .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
+                            .fixedSize()
                     }
                     Text(keySaved ? L10n.t(.keySaved, lang) : L10n.t(.keyNotSet, lang))
                         .font(DeAIDesign.font(10))
                         .foregroundStyle(keySaved ? .green : DeAIDesign.muted)
+                        .fixedSize()
+                        .lineLimit(1)
                 }
                 HStack {
                     Button(testing ? L10n.t(.testing, lang) : L10n.t(.testConnection, lang)) { testConnection(p) }
@@ -749,13 +752,11 @@ private struct AISettingsTab: View {
         HStack {
             Text(L10n.t(.modelLabel, lang))
             Spacer()
-            Picker(L10n.t(.modelLabel, lang), selection: modelSelection(p)) {
-                ForEach(OpenCodeGoModels.all, id: \.self) { m in
-                    Text(m).tag(m)
-                }
-                Text(L10n.t(.customModelTag, lang)).tag("__custom__")
-            }
-            .labelsHidden()
+            SettingsPickButton(
+                label: L10n.t(.modelLabel, lang), selection: modelSelection(p),
+                options: OpenCodeGoModels.all + ["__custom__"],
+                optionLabel: { $0 == "__custom__" ? L10n.t(.customModelTag, lang) : $0 }
+            )
             .frame(width: 280)
         }
         if customModel {
@@ -879,7 +880,7 @@ private struct AISettingsTab: View {
 
 /// AI 改写 tab's 改写技能 section: fixed safety rules, per-language
 /// pickers, the skill list, and 导入技能….
-private struct SkillsSectionView: View {
+struct SkillsSectionView: View {
     @ObservedObject var settings: AppSettings
     /// Observed directly — the list must re-render when the store's
     /// @Published skills change (import/delete/external edits).
@@ -890,12 +891,26 @@ private struct SkillsSectionView: View {
     @State private var confirmDelete: RewriteSkill?
     @State private var importError: String?
 
+    init(settings: AppSettings, store: RewriteSkillStore,
+         editingSkill: Binding<RewriteSkill?>, safetyExpanded: Bool = false) {
+        self.settings = settings
+        self.store = store
+        _editingSkill = editingSkill
+        _safetyExpanded = State(initialValue: safetyExpanded)
+    }
+
     var body: some View {
         SettingsSection(L10n.t(.sectionSkills, lang)) {
             VStack(alignment: .leading, spacing: 12) {
                 DisclosureGroup(
                     isExpanded: $safetyExpanded
                 ) {
+                    if lang == .en {
+                        Text(L10n.t(.promptOriginalLanguageNote, lang))
+                            .font(DeAIDesign.font(10))
+                            .foregroundStyle(DeAIDesign.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(RewritePrompt.safetyBlock)
                         .font(DeAIDesign.font(11))
                         .foregroundStyle(DeAIDesign.muted)
@@ -1127,6 +1142,90 @@ private struct SkillLangChip: View {
     }
 }
 
+/// Theme-aware provider selection, avoiding NSPopUpButton's label colors.
+private struct SettingsPickButton<Value: Hashable>: View {
+    let label: String
+    @Binding var selection: Value
+    let options: [Value]
+    let optionLabel: (Value) -> String
+    @Environment(\.isEnabled) private var enabled
+    @State private var open = false
+
+    var body: some View {
+        Button { open = true } label: {
+            HStack(spacing: 6) {
+                Text(optionLabel(selection)).lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(DeAIDesign.font(8, weight: .semibold))
+            }
+            .font(DeAIDesign.font(12))
+            .foregroundStyle(enabled ? DeAIDesign.text : DeAIDesign.muted)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(DeAIDesign.surface,
+                        in: RoundedRectangle(cornerRadius: DeAIDesign.controlRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                    .strokeBorder(DeAIDesign.border, lineWidth: 1)
+            }
+        }
+        .buttonStyle(SettingsPickButtonStyle())
+        .accessibilityLabel(label)
+        .accessibilityValue(optionLabel(selection))
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(options, id: \.self) { option in
+                    Button {
+                        selection = option
+                        open = false
+                    } label: {
+                        SettingsPickOptionRow(
+                            title: optionLabel(option), selected: option == selection
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(4)
+            .frame(minWidth: 280)
+            .background(DeAIDesign.background)
+        }
+    }
+}
+
+/// Keep a disabled format's muted label readable; PlainButtonStyle dims it again.
+private struct SettingsPickButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.72 : 1)
+    }
+}
+
+private struct SettingsPickOptionRow: View {
+    let title: String
+    let selected: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: selected ? "checkmark" : "")
+                .font(DeAIDesign.font(9, weight: .bold))
+                .frame(width: 12)
+            Text(title).font(DeAIDesign.font(12))
+            Spacer(minLength: 8)
+        }
+        .foregroundStyle(DeAIDesign.text)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: DeAIDesign.controlRadius)
+                .fill(hovering ? DeAIDesign.sidebar : .clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+}
+
 /// Skill selection control — plain Button + popover (system Menu renders
 /// black-on-dark; see AddProviderRow's note).
 private struct SkillPickButton: View {
@@ -1259,54 +1358,82 @@ struct SkillEditSheet: View {
             HStack(spacing: 8) {
                 Text(L10n.t(.skillNameLabel, lang))
                     .frame(width: 84, alignment: .leading)
-                TextField(L10n.t(.skillNameLabel, lang), text: $name)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(skill.isBuiltin)
+                if skill.isBuiltin {
+                    Text(skill.displayName(lang)).textSelection(.enabled)
+                    Spacer()
+                } else {
+                    TextField(L10n.t(.skillNameLabel, lang), text: $name)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
             HStack(spacing: 8) {
                 Text(L10n.t(.skillDescLabel, lang))
                     .frame(width: 84, alignment: .leading)
-                TextField(L10n.t(.skillDescLabel, lang), text: $desc)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(skill.isBuiltin)
+                if skill.isBuiltin {
+                    Text(skill.description).textSelection(.enabled)
+                    Spacer()
+                } else {
+                    TextField(L10n.t(.skillDescLabel, lang), text: $desc)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
             HStack(spacing: 8) {
                 Text(L10n.t(.skillLanguageLabel, lang))
                     .frame(width: 84, alignment: .leading)
-                ForEach(SkillLanguage.allCases, id: \.self) { l in
-                    Button {
-                        language = l
-                    } label: {
-                        Text(l.displayName(lang))
-                            .font(DeAIDesign.font(11))
-                            .foregroundStyle(
-                                language == l
-                                    ? DeAIDesign.text : DeAIDesign.muted
-                            )
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .background(
-                                language == l
-                                    ? DeAIDesign.surface : DeAIDesign.sidebar,
-                                in: DeAIDesign.pill
-                            )
-                            .overlay {
-                                DeAIDesign.pill.strokeBorder(
+                if skill.isBuiltin {
+                    SkillLangChip(language: skill.language, lang: lang)
+                } else {
+                    ForEach(SkillLanguage.allCases, id: \.self) { l in
+                        Button {
+                            language = l
+                        } label: {
+                            Text(l.displayName(lang))
+                                .font(DeAIDesign.font(11))
+                                .foregroundStyle(
                                     language == l
-                                        ? DeAIDesign.accent
-                                        : DeAIDesign.border,
-                                    lineWidth: 1
+                                        ? DeAIDesign.text : DeAIDesign.muted
                                 )
-                            }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .background(
+                                    language == l
+                                        ? DeAIDesign.surface : DeAIDesign.sidebar,
+                                    in: DeAIDesign.pill
+                                )
+                                .overlay {
+                                    DeAIDesign.pill.strokeBorder(
+                                        language == l
+                                            ? DeAIDesign.accent
+                                            : DeAIDesign.border,
+                                        lineWidth: 1
+                                    )
+                                }
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(skill.isBuiltin)
                 }
                 Spacer()
             }
-            TextEditor(text: $bodyText)
+            if skill.isBuiltin && lang == .en {
+                Text(L10n.t(.promptOriginalLanguageNote, lang))
+                    .font(DeAIDesign.font(10))
+                    .foregroundStyle(DeAIDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Group {
+                if skill.isBuiltin {
+                    ScrollView {
+                        Text(skill.body)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    TextEditor(text: $bodyText)
+                        .scrollContentBackground(.hidden)
+                }
+            }
                 .font(.system(size: 12, design: .monospaced))
-                .scrollContentBackground(.hidden)
                 .padding(8)
                 .background(
                     DeAIDesign.sidebar,
@@ -1314,7 +1441,6 @@ struct SkillEditSheet: View {
                         cornerRadius: DeAIDesign.controlRadius
                     )
                 )
-                .disabled(skill.isBuiltin)
                 .accessibilityLabel(L10n.t(.skillBodyLabel, lang))
             HStack {
                 Text(
@@ -1343,7 +1469,7 @@ struct SkillEditSheet: View {
             HStack {
                 if skill.isBuiltin {
                     Button(L10n.t(.skillDuplicate, lang)) {
-                        onDuplicate?(store.duplicate(skill))
+                        onDuplicate?(store.duplicate(skill, language: lang))
                     }
                     .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                 }

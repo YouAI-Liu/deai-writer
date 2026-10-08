@@ -80,10 +80,10 @@ public extension AppGroup {
         allCases.filter { $0 != .sensitive }
     }
 
-    /// Defaults: browsers are covered by the Chrome extension and
-    /// terminals/password managers are sensitive — both start disabled.
+    /// Defaults: browsers start disabled (opt-in in Settings) and
+    /// terminals/password managers are sensitive (never served).
     /// Code editors skip the markdown-residue check (they legitimately hold
-    /// markdown source); every other group runs all four checks.
+    /// markdown source); every other group runs every check category.
     static func defaultRule(for group: AppGroup) -> GroupRule {
         switch group {
         case .browser, .sensitive:

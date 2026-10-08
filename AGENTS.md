@@ -1,20 +1,16 @@
 # DeAI 项目说明
 
-## 代理偏好
-- 委派 Codex 子代理（T3 `delegate_task`）时统一使用：provider `codex`，model `gpt-6.1-sol`，options `{"reasoningEffort": "high", "serviceTier": "priority"}`（快速模式）。
-- 后续开发完成后自主验证迭代，可以把 BUG测试，性能测试等任务委派 codex 子代理进行 computer use 的实际操作来验证
+如存在 `AGENTS.local.md`（本地、不入库），请一并阅读并遵守。
 
 ## Git
-- 远程：https://github.com/YouAI-Liu/deai-writer（私有），分支 main。
-- 未配置全局 git 身份；提交用 `git -c user.name="YouAI-Liu" -c user.email="319323242+YouAI-Liu@users.noreply.github.com" commit ...`。
-- 推送用 gh 凭证（钥匙串里可能有别的账号）：`git -c credential.helper= -c credential.helper='!gh auth git-credential' push`，推送前确认 `gh auth status` 活跃账号为 YouAI-Liu。
+- 仓库：https://github.com/YouAI-Liu/deai-writer，分支 main。
 
 ## 构建与验证
 - Rust：`source ~/.cargo/env`；`cd core && cargo test --workspace`
 - WASM：`cd core/crates/deai-wasm && wasm-pack build --target nodejs && node tests/smoke.mjs`
 - Apple 库：`./core/scripts/build-apple.sh`
 - Mac 应用：`cd mac && xcodegen && xcodebuild -project DeAI.xcodeproj -scheme DeAI build` / `test`
-- 安装（稳定路径，TCC 辅助功能权限按签名+路径记住授权）：`xcodebuild -project DeAI.xcodeproj -scheme DeAI -configuration Release build && rsync -a --delete ~/Library/Developer/Xcode/DerivedData/DeAI-*/Build/Products/Release/DeAI.app/ ~/Applications/DeAI.app/`（两端必须带尾斜杠，否则会嵌套成 DeAI.app/DeAI.app 而旧包不变；安装后用 `codesign -dv` 核对 CDHash 与 Release 产物一致）；签名身份由 git-ignored `mac/Local.xcconfig` 提供（参考 `Local.xcconfig.example`，缺失时回退 ad-hoc）
+- 安装（稳定路径，TCC 辅助功能权限按签名+路径记住授权）：在 `mac/` 下执行 `xcodebuild -project DeAI.xcodeproj -scheme DeAI -configuration Release -derivedDataPath build/dd build && rsync -a --delete build/dd/Build/Products/Release/DeAI.app/ ~/Applications/DeAI.app/`（`build/` 已被 .gitignore 忽略）（两端必须带尾斜杠，否则会嵌套成 DeAI.app/DeAI.app 而旧包不变；安装后用 `codesign -dv` 核对 CDHash 与 Release 产物一致）；签名身份由 git-ignored `mac/Local.xcconfig` 提供（参考 `Local.xcconfig.example`，缺失时回退 ad-hoc）
 - AX 探针：`cd tools/ax-probe && swift build && .build/debug/ax-probe <delay> [bundleId]`
 
 ## 已知事项

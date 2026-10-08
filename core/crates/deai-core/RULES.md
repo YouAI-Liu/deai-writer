@@ -18,6 +18,8 @@
   - Markdown 类别除上表外不去重（`**[x](u)**` 这类嵌套标记必须同时报出 bold 与 link）。
   - 不同类别之间不去重。
 - `suggestions` 为空表示无确定性修复，UI 提供“AI 改写”。
+- 数字区间：破折号规则与 Harper 的连接符检查跳过两侧最近的非空白字符均为 ASCII 或全角数字的连接符（`—`、`–`、`―`、`--`，包括 `——`）。例如 `2019—2023`、`第 1—3 章`、`pp. 12–18`、`2019 — 2023`。只增加豁免，不扩展各规则的连接符触发范围。
+- 缩写保护：完整词元长度 ≥ 2（不计末尾复数 `s`），至少有一个大写字母，其余字符只能是大写字母、十进制数字、连字符或 `&`；允许末尾小写复数 `s`，相邻汉字不属于缩写词元。例如 `OKR`、`XWPF`、`IDH1`、`COVID-19`、`R&D`、`KPIs`、`MRI`；`IoT` 按普通词元处理。Harper 拼写结果与缩写重叠时丢弃；其他 Harper 结果在任一建议会改变缩写字母或大小写时丢弃。AI 味规则不单独标记缩写，AI 味与 Markdown 建议都必须保留涉及的完整缩写（允许去掉 `**MRI**` 的标记或 `It's worth noting that MRI` 的套话）。保护在核心中执行，Mac、FFI 与 WASM 共用。
 - `message` 用中文，格式「<短标题>：<一句说明>」。
 
 ## 中文 AI 味（category = AiToneZh）
@@ -35,7 +37,7 @@
 | zh.banned_opener | 1 | `说白了\|说穿了\|先说结论`，含其后可选的 `[，,：:]`。区间 = 短语 + 标点 | `""` |
 | zh.zero_anaphor | 1 | 非首段（段落过滤见 Z1），段首匹配 Z2，且段首第一句不含回指词 `这\|那\|其\|此\|上面\|前面\|上述\|以上\|该`。区间 = 段首评论语 | 评论语为 听起来/看起来/看上去/听上去 时给 `"这"+原文`，否则无 |
 | zh.persona_metaphor | 1 | `(?:像\|如同\|好比\|相当于\|宛如\|犹如)是?(?:一位\|一个\|一名)([^，。！？\n]{0,12}?)(?:导师\|秘书\|助手\|助理\|顾问\|管家\|审查员\|实习生\|教练\|向导\|守护者\|参谋\|军师)`，且满足其一：匹配内含 `永不\|不知疲倦\|智慧的\|全能的\|贴心的\|贴身的\|忠实的\|耐心的\|无所不知\|秒级响应`；或同句内匹配之后出现 `不仅[^。！？\n]*更`。不带褒义修饰的具体人物喻体（如“像一个老师傅”）不命中。区间 = 匹配 | 无 |
-| zh.dash | 2 | `——`（也接受单个 `—` 前后都是汉字的情况）。区间 = 破折号 | `"，"` |
+| zh.dash | 2 | `——`（也接受单个 `—` 前后都是汉字的情况），跳过通用约定中的数字区间。区间 = 破折号 | `"，"` |
 | zh.dunhao_list | 2 | `[^，。！？；：、\n]{1,14}、[^，。！？；：、\n]{1,14}、[^，。！？；：、\n]{1,14}`（一个分句内两个以上顿号）。跳过列表项行（L1）。区间 = 匹配 | 无 |
 | zh.nominalization | 2 | `(?:完成\|实现\|进行\|开展)了?对?[^，。\n]{0,10}的(?:优化\|提升\|调整\|分析\|改造\|升级)` | 无 |
 | zh.dang_shi | 2 | 句首 `当([^，。\n]{2,20})时，`，且捕获组不以 `的` 结尾（排除“的时候”）。区间 = 从 `当` 到 `，` | `捕获组 + "，"` |
@@ -63,7 +65,7 @@
 
 ## 英文 AI 味（category = AiToneEn）
 
-匹配一律不区分大小写，按词边界匹配。
+匹配一律不区分大小写，按词边界匹配，缩写按通用约定豁免。`en.signpost` 与 `en.ai_vocab` 的段内计数也排除缩写命中，避免抬高其他词的置信层级。
 
 | id | tier | 触发 | 修复建议 |
 |---|---|---|---|
@@ -74,7 +76,7 @@
 | en.vague_attribution | 2 | `(?:experts\|studies\|research\|observers\|critics\|scientists\|many) (?:say\|believe\|suggest\|argue\|agree\|have shown\|show)` | 无 |
 | en.not_but | 2 | `\b(?:it'?s\|this is\|that'?s\|it is) not (?:just \|only \|merely )?(?:about )?[^.!?\n]{1,40}?[,;—–]\s*(?:it'?s\|but)\b` | 无 |
 | en.not_only | 3 | `not only [^.!?\n]{1,40}? but (?:also )?` | 无 |
-| en.em_dash | 2 | `—`（U+2014），但不得与另一个 `—` 相邻，且两侧最近的非空格字符都不是 CJK（U+3000–U+303F、U+4E00–U+9FFF、U+FF00–U+FFEF）；以及前后带空格的 ` -- `。区间包含两侧空格 | `", "` |
+| en.em_dash | 2 | `—`（U+2014），但不得与另一个 `—` 相邻，且两侧最近的非空格字符都不是 CJK（U+3000–U+303F、U+4E00–U+9FFF、U+FF00–U+FFEF）；以及前后带空格的 ` -- `。跳过通用约定中的数字区间。区间包含两侧空格 | `", "` |
 | en.signpost | 2 / 3 | 句首 `(?:Moreover\|Furthermore\|Additionally\|In addition\|Notably\|Importantly\|Ultimately\|Consequently\|In conclusion\|In summary\|Overall),`：同一段出现 ≥ 2 次时每处为 tier 2，否则为 tier 3 | 无 |
 | en.ai_vocab | 2 / 3 | 整词：`delve`、`tapestry`、`testament`、`pivotal`、`intricate`、`multifaceted`、`underscore(s\|d)?`、`showcas(e\|es\|ed\|ing)`、`bolster(s\|ed\|ing)?`、`garner(s\|ed\|ing)?`、`realm`、`seamless(ly)?`、`leverag(e\|es\|ed\|ing)`、`foster(s\|ed\|ing)?`、`vibrant`、`meticulous(ly)?`、`paramount`、`nuanced`、`holistic`、`synergy`、`elevat(e\|es\|ed\|ing)`、`commendable`、`noteworthy`、`embark(s\|ed\|ing)?`。同一段内不同词 ≥ 3 个时每处为 tier 2，否则为 tier 3。已被其他 en.* 结果覆盖的区间按去重规则处理 | 无 |
 
@@ -97,6 +99,10 @@
 | md.italic | 2 | `*X*`：前一个字符不是 `*`、字母或数字，后一个字符不是 `*`、字母或数字，X 不以空白开头或结尾，也不含 `*` 和换行（Rust regex 不支持 lookaround，需手动判断） | `X` |
 | md.table_row | 2 | 整行匹配 `^\s*\|.*\|\s*$` | 无 |
 | md.escape | 2 | `\\([*_#`>\[\]~])` | `$1` |
+
+## AI 改写安全约束
+
+固定安全规则包含：「保留原文中的缩写、专有名词、术语、代码、公式和单位，不得改写、展开或翻译。」完整提示词与规则编号见 [`RewritePrompt.safetyBlock`](../../../mac/DeAI/AI/RewritePrompt.swift)，内置技能组合结果由 `SkillPromptAndSettingsTests.testBuiltinSkillIncludesFixedSafetyRules` 校验。
 
 ## 公共 API 增量
 

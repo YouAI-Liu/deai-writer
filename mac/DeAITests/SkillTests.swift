@@ -149,6 +149,49 @@ final class RewriteSkillStoreTests: XCTestCase {
         XCTAssertEqual(store.skills.first?.language, .any)
     }
 
+    func testDuplicateBuiltinNamesAreLocalizedAndUnique() {
+        let builtin = RewriteSkillStore.builtin
+        let zh = store.duplicate(builtin, language: .zh)
+        let zh2 = store.duplicate(builtin, language: .zh)
+        let en = store.duplicate(builtin, language: .en)
+        let en2 = store.duplicate(builtin, language: .en)
+        XCTAssertEqual(zh.name, "去 AI 味（默认）副本")
+        XCTAssertEqual(zh2.name, "去 AI 味（默认）副本 2")
+        XCTAssertEqual(en.name, "De-AI (default) copy")
+        XCTAssertEqual(en2.name, "De-AI (default) copy 2")
+        XCTAssertEqual(Set([zh.id, zh2.id, en.id, en2.id]).count, 4)
+        for copy in [zh, zh2, en, en2] {
+            XCTAssertFalse(copy.isBuiltin)
+            XCTAssertEqual(copy.body, builtin.body)
+            XCTAssertEqual(copy.language, builtin.language)
+        }
+        store.reload()
+        for copy in [zh, zh2, en, en2] {
+            XCTAssertEqual(store.skills.first { $0.id == copy.id }, copy)
+        }
+        XCTAssertEqual(store.skills.first, builtin)
+    }
+
+    func testDuplicateSkipsExistingNamesAndPreservesImportedName() {
+        let original = RewriteSkill(
+            id: "custom", name: "中文自定义技能", description: "说明",
+            language: .zh, body: "原始内容", isBuiltin: false
+        )
+        _ = store.save(original)
+        for suffix in ["", " 2"] {
+            _ = store.save(RewriteSkill(
+                id: "collision\(suffix)", name: original.name + " copy" + suffix,
+                description: "", language: .any, body: "", isBuiltin: false
+            ))
+        }
+        let copy = store.duplicate(original, language: .en)
+        XCTAssertEqual(copy.name, "中文自定义技能 copy 3")
+        XCTAssertEqual(copy.description, original.description)
+        XCTAssertEqual(copy.body, original.body)
+        XCTAssertEqual(copy.language, original.language)
+        XCTAssertEqual(original.displayName(.en), original.name)
+    }
+
     func testPickerEligibility() {
         store.skills = [
             RewriteSkillStore.builtin,
@@ -338,14 +381,27 @@ final class RewriteSkillStoreTests: XCTestCase {
 // MARK: - prompt composition + settings decode
 
 final class SkillPromptAndSettingsTests: XCTestCase {
-    func testBuiltinSkillMatchesLegacyDefault() {
-        // byte-identical to the old system(style: defaultStyle) output
-        let legacy = RewritePrompt.safetyBlock
+    func testBuiltinSkillIncludesFixedSafetyRules() {
+        let safety = """
+        你是一名中英文文字编辑，只做一件事：去掉文字里的"AI 腔"，让它读起来像作者本人写的。
+
+        硬性规则：
+        1. 不增加、不删除任何事实、数字、日期、人名、机构名、引文、链接、出处和限定语（如"可能""约""部分""一些"）。
+        2. 保持原文语言：中文仍为中文，英文仍为英文，中英混排保持原样。
+        3. 保留原文中的缩写、专有名词、术语、代码、公式和单位，不得改写、展开或翻译。
+        4. 保持原文的段落数量和顺序，不合并、不拆分段落；不添加标题、列表、加粗等 Markdown 格式。原文中残留的 Markdown 符号（**、#、行首的 - 或 * 列表符、`、> 等）要去掉，保留其中的文字。
+        5. 篇幅与原文相近，通常不超过原文的 110%。
+        6. 如果原文没有需要修改的地方，原样输出原文。
+
+        输出格式：只输出改写后的正文。不要解释，不要加引号或代码块，不要写"改写如下"之类的话。
+        """
+        XCTAssertEqual(RewritePrompt.safetyBlock, safety)
+        let expected = safety
             + "\n\n写作风格与偏好（用户自定义）：\n"
             + RewritePrompt.defaultStyle
         XCTAssertEqual(
             RewritePrompt.system(skill: RewriteSkillStore.builtin),
-            legacy
+            expected
         )
     }
 
@@ -456,4 +512,3 @@ final class SkillPromptAndSettingsTests: XCTestCase {
         try? FileManager.default.removeItem(at: temp)
     }
 }
-

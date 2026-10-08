@@ -1,3 +1,4 @@
+mod acronyms;
 pub mod offsets;
 pub mod personal;
 mod rules;
@@ -296,10 +297,14 @@ impl Checker {
         }
 
         let sensitivity = opts.sensitivity();
+        let acronyms = acronyms::ranges(text);
         let mut findings: Vec<Finding> = per_cat
             .into_iter()
             .flat_map(dedupe)
             .filter(|f| f.tier <= sensitivity)
+            .filter(|f| {
+                f.category == Category::Grammar || acronyms::preserves(text, &map, &acronyms, f)
+            })
             .collect();
         findings.sort_by_key(|f| (f.start, f.end));
         findings
@@ -315,6 +320,14 @@ impl Checker {
 
     fn grammar_findings(&self, text: &str, map: &Utf16Map) -> Vec<Finding> {
         let doc = Document::new_curated(text, &PlainEnglish);
+        let acronyms = acronyms::ranges(text);
+        static DASHES: std::sync::LazyLock<regex::Regex> =
+            std::sync::LazyLock::new(|| regex::Regex::new(r"[—–―]+|--").unwrap());
+        let numeric_dashes: Vec<_> = DASHES
+            .find_iter(text)
+            .filter(|m| rules::is_numeric_range(text, m.range()))
+            .map(|m| m.range())
+            .collect();
         let source: Vec<char> = text.chars().collect();
         let mut linter = self.linter.lock().unwrap();
         let n = self.lint_calls.fetch_add(1, Ordering::Relaxed) + 1;
@@ -351,6 +364,12 @@ impl Checker {
                     suggestions,
                     tier: 1,
                 }
+            })
+            .filter(|f| acronyms::preserves(text, map, &acronyms, f))
+            .filter(|f| {
+                let start = map.byte_of_utf16(f.start);
+                let end = map.byte_of_utf16(f.end);
+                !numeric_dashes.iter().any(|r| r.start <= start && end <= r.end)
             })
             .collect()
     }

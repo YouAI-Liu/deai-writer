@@ -8,3 +8,4 @@ core/build/
 .DS_Store
 .build/
 mac/Local.xcconfig
+AGENTS.local.md

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFEFA"/>
+      <stop offset="1" stop-color="#EFECE2"/>
+    </linearGradient>
+    <linearGradient id="clay" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#DE8160"/>
+      <stop offset="1" stop-color="#B6512C"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2E2D2A"/>
+      <stop offset="1" stop-color="#141413"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000" flood-opacity="0.22"/>
+    </filter>
+    <mask id="cut">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <path d="M292 732 L732 292" stroke="#000" stroke-width="104" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#000" stroke-opacity="0.06"/>
+  <path mask="url(#cut)" d="M512 236 C538 408 616 486 788 512 C616 538 538 616 512 788 C486 616 408 538 236 512 C408 486 486 408 512 236 Z" fill="url(#clay)"/>
+  <path d="M292 732 L732 292" stroke="url(#ink)" stroke-width="48" stroke-linecap="round"/>
+</svg>

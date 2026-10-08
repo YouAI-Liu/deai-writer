@@ -473,7 +473,9 @@ impl Rule for Dash {
                         m.start()..m.end()
                     }
                 };
-                if ctx.exclusions.zh_excluded(range.start) {
+                if ctx.exclusions.zh_excluded(range.start)
+                    || super::is_numeric_range(ctx.text, range.clone())
+                {
                     return None;
                 }
                 Some(ctx.make(

@@ -388,6 +388,169 @@ fn zh_dash_negative() {
 }
 
 #[test]
+fn dash_numeric_ranges_are_not_ai_tone() {
+    let checker = checker();
+    for text in [
+        "2019—2023",
+        "3—5 年",
+        "第 1—3 章",
+        "pp. 12–18",
+        "2019 — 2023",
+        "２０１９ — ２０２３",
+        "１——３ 年",
+        "2019 —— 2023",
+        "2019 -- 2023",
+        "2019--2023",
+        "２０１９ -- ２０２３",
+        "12―18",
+        "12 – 18",
+        "12\t—\t18",
+    ] {
+        let fs = checker.check(text, &opts_sens(3));
+        assert!(
+            fs.iter().all(|f| !f.rule_id.contains("dash")),
+            "{text}: {fs:?}"
+        );
+        let map = crate::offsets::Utf16Map::new(text);
+        for dash in regex::Regex::new(r"[—–―]+|--").unwrap().find_iter(text) {
+            let (start, end) = map.range_bytes(dash.start(), dash.end());
+            assert!(fs.iter().all(|f| f.end <= start || end <= f.start), "{text}: {fs:?}");
+        }
+    }
+}
+
+#[test]
+fn dash_with_only_one_numeric_side_still_matches() {
+    for text in ["2019 — results", "results — 2023", "1 -- result", "1——结论"] {
+        assert!(
+            checker()
+                .check(text, &opts_no_grammar(3))
+                .iter()
+                .any(|f| f.rule_id.ends_with("dash")),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn acronym_recognition_keeps_mixed_case_normal() {
+    let text = "OKR XWPF IDH1 COVID-19 R&D KPIs MRI IoT As xwpf";
+    let tokens: Vec<_> = crate::acronyms::ranges(text)
+        .into_iter()
+        .map(|r| &text[r])
+        .collect();
+    assert_eq!(
+        tokens,
+        ["OKR", "XWPF", "IDH1", "COVID-19", "R&D", "KPIs", "MRI"]
+    );
+}
+
+#[test]
+fn acronym_adjacent_to_chinese_prose_is_protected() {
+    for text in ["采用XWPF格式。", "采用IDH１检测。"] {
+        let tokens = crate::acronyms::ranges(text);
+        assert_eq!(tokens.len(), 1);
+        assert!(checker().check(text, &opts_sens(3)).is_empty(), "{text}");
+    }
+}
+
+#[test]
+fn acronym_end_to_end_preserves_tokens_but_finds_real_grammar_errors() {
+    let text = "😀 We use OKR, XWPF, IDH1, COVID-19, R&D, KPIs, and MRI. This is an test.";
+    let fs = checker().check(text, &opts_sens(3));
+    let map = crate::offsets::Utf16Map::new(text);
+    for r in crate::acronyms::ranges(text) {
+        let (start, end) = map.range_bytes(r.start, r.end);
+        assert!(
+            fs.iter().all(|f| f.end <= start || end <= f.start),
+            "{}: {fs:?}",
+            &text[r]
+        );
+    }
+    assert!(fs
+        .iter()
+        .any(|f| f.category == Category::Grammar && slice(text, f) == "an"));
+}
+
+#[test]
+fn acronym_spelling_filter_is_not_a_dictionary_whitelist() {
+    let fs = checker().check("We use xwpf.", &opts());
+    assert!(fs
+        .iter()
+        .any(|f| f.rule_id == "harper.Spelling" && slice("We use xwpf.", f) == "xwpf"));
+    assert!(checker()
+        .check("We use XWPF.", &opts())
+        .iter()
+        .all(|f| slice("We use XWPF.", f) != "XWPF"));
+}
+
+#[test]
+fn acronym_case_changing_grammar_suggestions_are_filtered() {
+    let text = "R&D uses KPIs";
+    let map = crate::offsets::Utf16Map::new(text);
+    let acronyms = crate::acronyms::ranges(text);
+    for (start, end, replacement) in [
+        (0, 1, "r"),
+        (9, 13, "Kpis"),
+        (0, 13, "Research and development uses KPIs"),
+    ] {
+        let f = Finding {
+            category: Category::Grammar,
+            rule_id: "harper.Capitalization".into(),
+            message: String::new(),
+            start,
+            end,
+            suggestions: vec![replacement.into()],
+            tier: 1,
+        };
+        assert!(!crate::acronyms::preserves(text, &map, &acronyms, &f));
+    }
+}
+
+#[test]
+fn acronym_opener_and_markdown_fixes_preserve_case() {
+    for acronym in ["OKR", "XWPF", "IDH1", "COVID-19", "R&D", "KPIs", "MRI"] {
+        let text = format!("It's worth noting that {acronym} is useful.");
+        let f = one(
+            &checker().check(&text, &opts_no_grammar(3)),
+            "en.filler_opener",
+        );
+        assert_eq!(
+            apply_suggestion(&text, f.start, f.end, &f.suggestions[0]),
+            format!("{acronym} is useful.")
+        );
+        assert_eq!(
+            strip_markdown(&format!("**{acronym}** and `{acronym}`"), &opts()),
+            format!("{acronym} and {acronym}")
+        );
+    }
+}
+
+#[test]
+fn acronym_ai_vocab_is_not_flagged_as_a_word() {
+    assert!(checker()
+        .check("REALM SYNERGY DELVE", &opts_no_grammar(3))
+        .is_empty());
+    assert_eq!(
+        by_id(
+            &checker().check("realm synergy delve", &opts_no_grammar(3)),
+            "en.ai_vocab"
+        )
+        .len(),
+        3
+    );
+}
+
+#[test]
+fn acronyms_do_not_raise_other_words_sensitivity() {
+    let checker = checker();
+    for text in ["REALM SYNERGY seamless", "MOREOVER, it works. Furthermore, it is useful."] {
+        assert!(checker.check(text, &opts_no_grammar(2)).is_empty(), "{text}");
+        assert_eq!(checker.check(text, &opts_no_grammar(3)).len(), 1, "{text}");
+    }
+}
+
+#[test]
 fn zh_dunhao_list() {
     let text = "采集、存储、展示。";
     let f = one(

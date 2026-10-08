@@ -15,6 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DebugUICapture.start(directory: arguments[index + 1])
             return
         }
+        if let index = arguments.firstIndex(of: "--readme-capture"), index + 1 < arguments.count {
+            ReadmeCapture.start(directory: arguments[index + 1])
+            return
+        }
         if arguments.contains("--ui-preview") {
             DebugUIWindow.open()
             return
@@ -34,8 +38,12 @@ struct DeAIApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        MenuBarExtra("DeAI", systemImage: "text.badge.checkmark") {
+        MenuBarExtra {
             MenuContent(controller: appDelegate.controller)
+        } label: {
+            Image("MenuBarIcon")
+                .renderingMode(.template)
+                .accessibilityLabel("DeAI")
         }
         .menuBarExtraStyle(.window)
         Window(L10n.t(.windowRuleTest, appDelegate.controller.settings.uiLanguage), id: "debug") {
@@ -97,6 +105,11 @@ private final class WindowTitleView: NSView {
 }
 
 struct MenuContent: View {
+    #if DEBUG
+    /// ReadmeCapture hides the debug-only "UI Preview" row in its
+    /// screenshots — the release menu never had it.
+    static var hideDebugItems = false
+    #endif
     @ObservedObject var controller: AppController
     @ObservedObject var settings: AppSettings
     @Environment(\.openWindow) private var openWindow
@@ -169,7 +182,9 @@ struct MenuContent: View {
                 menuButton(L10n.t(.menuSettings, lang)) { controller.showSettingsWindow() }
                 menuButton(L10n.t(.menuRuleTest, lang)) { openWindow(id: "debug") }
                 #if DEBUG
-                menuButton(L10n.t(.menuUIPreview, lang)) { openWindow(id: "ui-preview") }
+                if !Self.hideDebugItems {
+                    menuButton(L10n.t(.menuUIPreview, lang)) { openWindow(id: "ui-preview") }
+                }
                 #endif
                 menuButton(L10n.t(.menuQuit, lang)) { NSApp.terminate(nil) }
             }

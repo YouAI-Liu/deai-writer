@@ -89,4 +89,48 @@ assert.equal(pf[1].suggestions[0], '帮助');
 // 保留词 sits at UTF-16 units 12..15 in pText
 assert.deepEqual(personal_keep_ranges(pText, pEntries), [[12, 15]]);
 
+// Numeric range connectors stay untouched, including Harper formatting lints.
+const rangeTexts = [
+  '2019—2023', '3—5 年', '第 1—3 章', 'pp. 12–18', '2019 — 2023',
+  '２０１９ — ２０２３', '１——３ 年', '2019 —— 2023', '2019 -- 2023',
+  '2019--2023', '２０１９ -- ２０２３', '12―18', '12 – 18', '12\t—\t18',
+];
+for (const text of rangeTexts) {
+  const fs = checker.check(text, { ...opts, sensitivity: 3 });
+  for (const dash of text.matchAll(/[—–―]+|--/g)) {
+    assert.ok(fs.every(f => f.end <= dash.index || dash.index + dash[0].length <= f.start),
+      `numeric range connector: ${text}`);
+  }
+}
+
+const acronyms = ['OKR', 'XWPF', 'IDH1', 'COVID-19', 'R&D', 'KPIs', 'MRI'];
+for (const text of ['采用XWPF格式。', '采用IDH１检测。']) {
+  assert.deepEqual(checker.check(text, { ...opts, sensitivity: 3 }), [], text);
+}
+const acronymText = '😀 We use OKR, XWPF, IDH1, COVID-19, R&D, KPIs, and MRI. This is an test.';
+const acronymFindings = checker.check(acronymText, { ...opts, sensitivity: 3 });
+for (const token of acronyms) {
+  const start = acronymText.indexOf(token);
+  assert.ok(acronymFindings.every(f => f.end <= start || start + token.length <= f.start),
+    `acronym: ${token}`);
+}
+assert.ok(acronymFindings.some(f => f.category === 'Grammar'
+  && acronymText.slice(f.start, f.end) === 'an'));
+
+for (const token of acronyms) {
+  const text = `It's worth noting that ${token} is useful.`;
+  const opener = checker.check(text, { ...opts, grammar: false })
+    .find(f => f.rule_id === 'en.filler_opener');
+  assert.ok(opener, `opener before ${token}`);
+  assert.equal(apply_suggestion(text, opener.start, opener.end, opener.suggestions[0]),
+    `${token} is useful.`);
+  assert.equal(strip_markdown(`**${token}** and \`${token}\``, {}), `${token} and ${token}`);
+}
+
+for (const text of ['REALM SYNERGY seamless', 'MOREOVER, it works. Furthermore, it is useful.']) {
+  assert.deepEqual(checker.check(text, { ...opts, grammar: false, sensitivity: 2 }), [], text);
+  assert.equal(checker.check(text, { ...opts, grammar: false, sensitivity: 3 }).length, 1, text);
+}
+
 console.log('smoke ok:', JSON.stringify(findings, null, 2));
+console.log(`false-positive regression ok: ${rangeTexts.length} ranges, ${acronyms.length} acronyms, ${acronyms.length} opener/Markdown cases`);

@@ -167,6 +167,8 @@ enum L10n {
         case skillLongWarning
         case skillViewEdit
         case skillDuplicate
+        case skillCopyName
+        case promptOriginalLanguageNote
         case builtinReadonlyNote
         case skillDeleteTitle   // %@ skill name
         case skillDeleteMessage
@@ -410,6 +412,8 @@ enum L10n {
         .skillLongWarning: "较长：每次改写会更慢、更贵",
         .skillViewEdit: "查看/编辑",
         .skillDuplicate: "复制为新技能",
+        .skillCopyName: "%@副本",
+        .promptOriginalLanguageNote: "这是发送给 AI 的完整提示词，按原始语言显示。",
         .builtinReadonlyNote: "内置技能为只读",
         .skillDeleteTitle: "删除技能「%@」？",
         .skillDeleteMessage: "该技能文件将从磁盘中删除。",
@@ -651,6 +655,8 @@ enum L10n {
         .skillLongWarning: "Long: each rewrite is slower and costlier",
         .skillViewEdit: "View/Edit",
         .skillDuplicate: "Duplicate as New Skill",
+        .skillCopyName: "%@ copy",
+        .promptOriginalLanguageNote: "This is the exact prompt text sent to the AI, shown in its original language.",
         .builtinReadonlyNote: "Built-in skills are read-only",
         .skillDeleteTitle: "Delete skill “%@”?",
         .skillDeleteMessage: "The skill file will be removed from disk.",

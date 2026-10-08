@@ -445,9 +445,14 @@ final class DebugUICapture {
             }
             // built-in sheet: read-only + 复制为新技能
             if let builtin = captureSkills.skills.first {
-                show(SkillEditSheet(skill: builtin, store: captureSkills),
-                     size: NSSize(width: 520, height: 480))
-                try await save("skill-sheet-builtin")
+                for lang in [UILanguage.zh, .en] {
+                    for dark in [false, true] {
+                        show(SkillEditSheet(skill: builtin, store: captureSkills)
+                                .environment(\.deaiUILanguage, lang),
+                             size: NSSize(width: 520, height: 480), dark: dark)
+                        try await save("skill-sheet-builtin-\(lang.rawValue)-\(dark ? "dark" : "light")")
+                    }
+                }
             }
             // rewrite panel states (mock model — same view the panel hosts)
             let rewriteModel = RewritePanelModel()
@@ -598,6 +603,28 @@ final class DebugUICapture {
                 skills: captureSkills
             )
             enSettings.uiLanguage = .en
+            show(
+                SkillsSectionView(settings: enSettings, store: captureSkills,
+                                  editingSkill: .constant(nil), safetyExpanded: true)
+                    .environment(\.deaiUILanguage, .en)
+                    .padding(30).background(DeAIDesign.background),
+                size: NSSize(width: 560, height: 660)
+            )
+            try await save("settings-safety-expanded-en")
+            let go = enSettings.addProvider(preset: .opencodeGo)
+            enSettings.activeProviderId = go.id
+            show(SettingsView(settings: enSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            scrollTo(fraction: 0.15, in: window.contentView)
+            try await save("settings-provider-dark")
+            var customGo = go
+            customGo.model = "my-custom-model"
+            enSettings.updateProvider(customGo)
+            show(SettingsView(settings: enSettings, initialTab: 2),
+                 size: NSSize(width: 560, height: 660), dark: true)
+            scrollTo(fraction: 0.15, in: window.contentView)
+            try await save("settings-provider-dark-custom")
+            enSettings.deleteProvider(id: go.id)
             show(SettingsView(settings: enSettings, currentBundleId: "com.apple.TextEdit"),
                  size: NSSize(width: 560, height: 660))
             try await save("settings-check-en")
@@ -659,6 +686,22 @@ final class DebugUICapture {
 
             rewriteModel.lang = .en
             rewriteModel.phase = .result
+            rewriteModel.original = "It is worth noting that we need to leverage synergies and delve into this. "
+                + String(repeating: "The team will review the findings, document the changes, and complete the next round of testing. ", count: 8)
+                + "This is the final sentence of the original."
+            rewriteModel.result = String(repeating: "The team will review the findings and test the changes. ", count: 12)
+                + "This is the final sentence of the rewrite."
+            rewriteModel.rememberPairs = []
+            rewriteModel.rememberExpanded = false
+            show(rewriteStage(rewriteModel, height: 660),
+                 size: NSSize(width: 620, height: 660))
+            try await save("rewrite-long-en")
+            scrollToBottom(in: window.contentView)
+            try await save("rewrite-long-en-bottom")
+            rewriteModel.original = "It is worth noting that we need to leverage synergies and delve into this."
+            rewriteModel.result = "The team will review this together."
+            show(rewriteStage(rewriteModel), size: NSSize(width: 620, height: 420))
+            try await save("rewrite-qa-en")
             rewriteModel.rememberPairs = RewriteDiff.wordPairs(
                 original: rewriteModel.original,
                 result: rewriteModel.result

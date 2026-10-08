@@ -249,7 +249,9 @@ impl Rule for EmDash {
         let mut out: Vec<Finding> = Vec::new();
         // ASCII " -- "
         for m in DOUBLE_HYPHEN.find_iter(ctx.text) {
-            if !ctx.exclusions.code_excluded(m.start()) {
+            if !ctx.exclusions.code_excluded(m.start())
+                && !super::is_numeric_range(ctx.text, m.range())
+            {
                 out.push(ctx.make(
                     CAT,
                     "en.em_dash",
@@ -270,6 +272,9 @@ impl Rule for EmDash {
             let prev = text[..i].chars().last();
             let next = text[i + c.len_utf8()..].chars().next();
             if prev == Some('—') || next == Some('—') {
+                continue;
+            }
+            if super::is_numeric_range(text, i..i + c.len_utf8()) {
                 continue;
             }
             let nearest_left = text[..i].chars().rev().find(|&c| !is_space(c));
@@ -321,12 +326,15 @@ impl Rule for Signpost {
     }
     fn check(&self, ctx: &Ctx) -> Vec<Finding> {
         let mut out = Vec::new();
+        let acronyms = crate::acronyms::ranges(ctx.text);
         for line in ctx.lines {
             let hits: Vec<_> = SIGNPOST
                 .find_iter(ctx.line_text(line))
                 .filter(|m| {
                     let abs = line.range.start + m.start();
-                    ctx.is_sentence_start(abs) && !ctx.exclusions.code_excluded(abs)
+                    ctx.is_sentence_start(abs)
+                        && !ctx.exclusions.code_excluded(abs)
+                        && !acronyms.iter().any(|r| r.start <= abs && line.range.start + m.end() - 1 <= r.end)
                 })
                 .collect();
             let tier = if hits.len() >= 2 { 2 } else { 3 };
@@ -363,10 +371,16 @@ impl Rule for AiVocab {
     }
     fn check(&self, ctx: &Ctx) -> Vec<Finding> {
         let mut out = Vec::new();
+        let acronyms = crate::acronyms::ranges(ctx.text);
         for line in ctx.lines {
             let hits: Vec<_> = AI_VOCAB
                 .find_iter(ctx.line_text(line))
-                .filter(|m| !ctx.exclusions.code_excluded(line.range.start + m.start()))
+                .filter(|m| {
+                    let start = line.range.start + m.start();
+                    let end = line.range.start + m.end();
+                    !ctx.exclusions.code_excluded(start)
+                        && !acronyms.iter().any(|r| r.start <= start && end <= r.end)
+                })
                 .collect();
             let distinct: HashSet<String> =
                 hits.iter().map(|m| m.as_str().to_lowercase()).collect();
