@@ -459,6 +459,19 @@ final class ProviderConfigTests: XCTestCase {
         XCTAssertEqual(p.format, .openAIResponses)
     }
 
+    func testFormatFollowsModel() {
+        // known OpenCode Go model dictates the format
+        var p = ProviderConfig(preset: .opencodeGo)
+        XCTAssertTrue(p.formatFollowsModel)
+        // unknown custom model name: the user picks the format
+        p.model = "qa-custom-model"
+        XCTAssertFalse(p.formatFollowsModel)
+        // only opencodeGo follows the model table
+        var d = ProviderConfig(preset: .deepseek)
+        d.model = "deepseek-v4-flash"
+        XCTAssertFalse(d.formatFollowsModel)
+    }
+
     func testPresetDefaults() {
         XCTAssertEqual(
             ProviderConfig(preset: .ollama).baseURL,

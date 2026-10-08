@@ -135,11 +135,16 @@ struct ProviderConfig: Codable, Identifiable, Equatable {
         )
     }
 
+    /// True when the wire format is dictated by a known OpenCode Go model.
+    var formatFollowsModel: Bool {
+        preset == .opencodeGo && OpenCodeGoModels.format(for: model) != nil
+    }
+
     /// For opencodeGo the wire format is decided by the chosen model; call
     /// after mutating `model` so the format follows the table.
     mutating func syncFormatWithModel() {
-        if preset == .opencodeGo, let f = OpenCodeGoModels.format(for: model) {
-            format = f
-        }
+        guard formatFollowsModel, let f = OpenCodeGoModels.format(for: model)
+        else { return }
+        format = f
     }
 }

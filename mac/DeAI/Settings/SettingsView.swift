@@ -686,7 +686,7 @@ private struct AISettingsTab: View {
                     )
                     .frame(width: 280)
                     // OpenCode Go derives the format from the chosen model
-                    .disabled(p.preset == .opencodeGo && !customModel)
+                    .disabled(p.formatFollowsModel)
                 }
                 HStack {
                     Text("Base URL")
@@ -889,7 +889,7 @@ struct SkillsSectionView: View {
     @Binding var editingSkill: RewriteSkill?
     @State private var safetyExpanded = false
     @State private var confirmDelete: RewriteSkill?
-    @State private var importError: String?
+    @State private var importError: SkillError?
 
     init(settings: AppSettings, store: RewriteSkillStore,
          editingSkill: Binding<RewriteSkill?>, safetyExpanded: Bool = false) {
@@ -968,7 +968,7 @@ struct SkillsSectionView: View {
                     .buttonStyle(DeAIButtonStyle(secondary: true, compact: true))
                 }
                 if let importError {
-                    Text(importError)
+                    Text(skillErrorText(importError))
                         .font(DeAIDesign.font(10))
                         .foregroundStyle(DeAIDesign.danger)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1045,7 +1045,7 @@ struct SkillsSectionView: View {
         case .success:
             importError = nil
         case .failure(let error):
-            importError = skillErrorText(error)
+            importError = error
         }
     }
 
