@@ -41,6 +41,8 @@ cp "$WORK/source/LICENSE" "$APP/Contents/Resources/LICENSE.txt"
 cp "$WORK/source/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 printf 'Source: https://github.com/YouAI-Liu/deai-writer\nCommit: %s\nPreview: %s\n' \
     "$SHA" "$VERSION" > "$APP/Contents/Resources/BUILD-INFO.txt"
+# Xcode's linker can retain object-file paths in the debug symbol table.
+xcrun strip -S "$APP/Contents/MacOS/DeAI"
 codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 
