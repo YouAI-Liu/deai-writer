@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using DeAI.Automation;
 
 namespace DeAI.App;
@@ -15,25 +16,40 @@ internal sealed class PanelBehavior : IDisposable
     private readonly Func<bool> popupOpen;
     private readonly Hook mouse, keyboard;
     private IntPtr mouseHandle, keyboardHandle;
+    private bool fitting, disposed;
     public PanelBehavior(Window window, Action dismiss, Func<bool>? popupOpen = null)
     {
         this.window = window; this.dismiss = dismiss; this.popupOpen = popupOpen ?? (() => false);
         mouse = Mouse; keyboard = Keyboard;
         window.IsVisibleChanged += VisibilityChanged;
         window.SizeChanged += Resized;
+        window.LocationChanged += Relocated;
+        window.ContentRendered += Relocated;
         window.Closed += (_, _) => Dispose();
     }
     private void VisibilityChanged(object sender, DependencyPropertyChangedEventArgs args)
     {
         if (window.IsVisible)
         {
-            Fit();
+            QueueFit();
             mouseHandle = SetWindowsHookEx(14, mouse, GetModuleHandle(null), 0);
             keyboardHandle = SetWindowsHookEx(13, keyboard, GetModuleHandle(null), 0);
         }
         else Unhook();
     }
-    private void Resized(object sender, SizeChangedEventArgs args) { if (window.IsVisible) Fit(); }
+    private void Resized(object sender, SizeChangedEventArgs args) => QueueFit();
+    private void Relocated(object? sender, EventArgs args) => QueueFit();
+    private void QueueFit()
+    {
+        if (fitting || disposed) return;
+        fitting = true;
+        // SizeChanged precedes the native HWND resize; clamp only after layout has settled.
+        window.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            fitting = false;
+            if (!disposed && window.IsVisible) Fit();
+        }));
+    }
     private void Fit()
     {
         var handle = new WindowInteropHelper(window).Handle;
@@ -107,7 +123,7 @@ internal sealed class PanelBehavior : IDisposable
         if (keyboardHandle != IntPtr.Zero) UnhookWindowsHookEx(keyboardHandle);
         mouseHandle = keyboardHandle = IntPtr.Zero;
     }
-    public void Dispose() { Unhook(); window.IsVisibleChanged -= VisibilityChanged; window.SizeChanged -= Resized; }
+    public void Dispose() { if (disposed) return; disposed = true; Unhook(); window.IsVisibleChanged -= VisibilityChanged; window.SizeChanged -= Resized; window.LocationChanged -= Relocated; window.ContentRendered -= Relocated; }
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookEx(int kind, Hook callback, IntPtr module, uint thread);

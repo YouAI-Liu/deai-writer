@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
 using System.Threading;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Interop;
 using DeAI.App;
 using static DeAI.Tests.Program;
 
@@ -13,7 +15,7 @@ namespace DeAI.Tests;
 
 internal static class LayoutTests
 {
-    public static void Run()
+    public static void Run(bool nativeWindow)
     {
         var thread = new Thread(() =>
         {
@@ -25,6 +27,7 @@ internal static class LayoutTests
                 {
                     Ui.RefreshTheme(dark);
                     var theme = dark ? "dark" : "light";
+                    if (nativeWindow) Check(theme + " native panel growth and movement refit the working area", NativeBounds);
                     Check(theme + " learn action requires a selection and stays disabled after saving", () =>
                     {
                         var choices = new[] { new CheckBox(), new CheckBox() };
@@ -150,6 +153,55 @@ internal static class LayoutTests
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
     }
+    private static void NativeBounds()
+    {
+        var window = new Window { Title = "Synthetic layout regression" };
+        var body = Ui.Panel(window, 420);
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Top = SystemParameters.WorkArea.Bottom - 500;
+        for (var i = 0; i < 2; i++) body.Children.Add(new TextBox { Text = new string('x', 350), TextWrapping = TextWrapping.Wrap, MinHeight = 20, MaxHeight = 160 });
+        var pairs = new StackPanel();
+        for (var i = 0; i < 10; i++) pairs.Children.Add(new CheckBox { Content = new string('甲', 20) + " → " + new string('乙', 20), Margin = new Thickness(0, 4, 0, 4), FontSize = 11 });
+        var expander = new Expander { Header = "Remember changes (10)", Content = pairs };
+        body.Children.Add(expander);
+        var footer = Ui.Actions(Ui.Button("Replace", () => { }), Ui.Button("Copy", () => { }), Ui.Button("Retry", () => { }), Ui.Button("Cancel", () => { }));
+        Ui.PinPanel(window, body, Ui.Title("AI rewrite"), footer);
+        using var behavior = new PanelBehavior(window, () => { });
+        try
+        {
+            window.Show(); Drain();
+            var handle = new WindowInteropHelper(window).Handle;
+            var area = System.Windows.Forms.Screen.FromHandle(handle).WorkingArea;
+            void AssertBounds()
+            {
+                Require(GetWindowRect(handle, out var rect), "Native panel rect is unavailable");
+                Require(rect.Top >= area.Top && rect.Bottom <= area.Bottom, $"Native panel is outside work area: {rect.Top}..{rect.Bottom}, expected {area.Top}..{area.Bottom}");
+                var bottom = footer.PointToScreen(new System.Windows.Point(0, footer.ActualHeight)).Y;
+                Require(bottom <= area.Bottom, "Native footer is outside the work area");
+            }
+            AssertBounds(); expander.IsExpanded = true; Drain(); AssertBounds();
+            window.Top = SystemParameters.WorkArea.Bottom - 40; Drain(); AssertBounds();
+            for (var i = 0; i < 60; i++) pairs.Children.Add(new CheckBox { Content = new string('甲', 40), Margin = new Thickness(0, 4, 0, 4) });
+            Drain(); AssertBounds();
+            var scroll = Find<ScrollViewer>((Border)window.Content);
+            Require(scroll.ScrollableHeight > 0, "Oversized native panel has no scroll extent");
+            scroll.ScrollToEnd(); Drain(); AssertBounds();
+            Require(scroll.VerticalOffset > 0, "Native panel cannot scroll to its end");
+            expander.IsExpanded = false; Drain(); AssertBounds();
+        }
+        finally { window.Close(); Drain(); }
+    }
+    private static void Drain()
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+        }
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
     private static void Layout(FrameworkElement element, double width, double height = double.PositiveInfinity)
     {
         element.Measure(new Size(width, height));
