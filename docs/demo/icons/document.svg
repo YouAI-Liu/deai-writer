@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192" role="img" aria-labelledby="title desc">
+  <title id="title">Document writing</title>
+  <desc id="desc">An original document symbol with a clay-colored margin and lines of text.</desc>
+  <!-- Original DeAI demo artwork. Copyright 2026 YouAI-Liu. MIT license. -->
+  <rect x="6" y="6" width="180" height="180" rx="38" fill="#F5F1E9" stroke="#DDD6CA" stroke-width="2"/>
+  <rect x="43" y="31" width="108" height="132" rx="13" fill="#FFFEFB" stroke="#292A27" stroke-width="5"/>
+  <path d="M64 55v84" stroke="#C6613F" stroke-width="7" stroke-linecap="round"/>
+  <path d="M85 61h43M85 82h34M85 103h43M85 124h26" fill="none" stroke="#292A27" stroke-width="6" stroke-linecap="round"/>
+</svg>

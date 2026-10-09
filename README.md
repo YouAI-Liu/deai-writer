@@ -1,121 +1,126 @@
 <p align="center"><b>English</b> | <a href="README.zh-CN.md">简体中文</a></p>
 
 <div align="center">
-  <img src="docs/brand/icon-256.png" width="128" height="128" alt="DeAI icon">
+  <img src="docs/brand/icon-256.png" width="96" height="96" alt="DeAI icon">
   <h1>DeAI</h1>
-  <p><b>Make your writing sound like you, not AI.</b></p>
-  <p>
-    <img src="https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey?logo=apple" alt="Platform: macOS 14+">
-    <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT">
-    <img src="https://img.shields.io/badge/core-Rust-orange?logo=rust" alt="Core: Rust">
-    <img src="https://img.shields.io/badge/app-SwiftUI-F05138?logo=swift&logoColor=white" alt="App: SwiftUI">
-  </p>
+  <p>A writing assistant for Word, TextEdit and Notes on macOS.</p>
 </div>
 
-<!-- hero: demo GIF/video goes here -->
+DeAI underlines stock phrases, English grammar issues and leftover Markdown as you write. Click an underline to review a suggestion, or ask your chosen model to rewrite the paragraph and compare the changes before applying them.
 
-DeAI is a menu bar app that checks your writing as you type, in the apps you already use. It underlines AI-sounding phrasing, English grammar issues and leftover Markdown, and offers a fix or an AI rewrite on click.
+[![DeAI demo: finding phrases, reviewing a rewrite and setting writing preferences](docs/demo/deai-demo.gif)](docs/demo/deai-demo.mp4)
 
-## Features
+[Watch the MP4](docs/demo/deai-demo.mp4) · macOS 14 or later · Chinese and English
 
-- **System-wide underlines.** DeAI reads the focused text field through macOS Accessibility and draws underlines over it; clicking one opens a suggestion card. Works in apps that expose their text through Accessibility, such as Word, TextEdit and Notes. Browsers have their own app group, which is off by default and can be turned on in Settings.
-- **English grammar.** Grammar and spelling checks are powered by [Harper](https://github.com/Automattic/harper).
-- **AI-tone detection in Chinese and English.** Rule-based detection of common AI writing patterns, with three sensitivity levels.
-- **Markdown residue cleanup.** Flags `**bold**`, `#` headings, list bullets, links and other Markdown that leaked into plain text.
-- **Selection check.** Select text and press the hotkey (default <kbd>⌃</kbd><kbd>⌥</kbd><kbd>R</kbd>) to step through every issue in the selection one card at a time.
-- **AI rewrite.** Rewrite a sentence from the suggestion card and review the diff before applying it. Provider presets: OpenCode Go, OpenAI, Anthropic, DeepSeek, Gemini, Ollama, LM Studio, or a custom endpoint, using the OpenAI Chat Completions, OpenAI Responses or Anthropic Messages format.
-- **Keys in Keychain.** API keys are stored in the macOS Keychain, never in the settings file.
-- **Personal lexicon.** Add words to replace, avoid or keep. Rewrites respect your lexicon, and replacements from a rewrite can be saved to it in one click.
-- **Rewrite skills.** Import a Markdown file (or a folder with `SKILL.md`) as a rewrite style and tag it Chinese, English or any. Pick one skill for Chinese text and one for English text; each rewrite uses the skill for the language it detects.
-- **Per-app control.** Enable checks per app group (office, notes, chat and mail, code, …) or per app. Terminals and password managers on the built-in exclusion list (`AppGroup.table` in `mac/DeAI/Settings/AppGroups.swift`) are never checked; other unknown apps fall into the “Other” group.
-- **Chinese and English UI, light and dark.** The interface follows the system appearance; underline colors and shapes are customizable.
+## What it does
 
-## Screenshots
+- **Check as you type.** Local rules flag common Chinese and English writing patterns; [Harper](https://github.com/Automattic/harper) checks English grammar and spelling. Adjust the sensitivity or turn individual rules off.
+- **Clean up pasted text.** Remove Markdown markers such as `**bold**`, headings and links from plain text.
+- **Review a selection.** Select a passage and press <kbd>Control</kbd> + <kbd>Option</kbd> + <kbd>R</kbd> to go through its findings one at a time.
+- **Rewrite with a model.** Open AI rewrite from a suggestion card, compare the original and result, then accept or cancel.
+- **Keep your preferences.** Add replacements, words to avoid and terms to preserve to a personal lexicon. Import a Markdown file or a folder containing `SKILL.md` as rewrite guidance, with separate choices for Chinese and English.
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/en/card-light.png" alt="Suggestion card (light)"><br><sub>Suggestion card</sub></td>
-    <td width="50%"><img src="docs/images/en/card-dark.png" alt="Suggestion card (dark)"><br><sub>Suggestion card, dark mode</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/en/selection-check.png" alt="Selection check"><br><sub>Selection check</sub></td>
-    <td><img src="docs/images/en/rewrite-panel.png" alt="AI rewrite panel"><br><sub>AI rewrite with diff</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/en/settings-provider.png" alt="AI service settings"><br><sub>Settings: AI service and API key</sub></td>
-    <td><img src="docs/images/en/settings-ai.png" alt="AI rewrite settings"><br><sub>Settings: rewrite skills and shortcut</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/en/settings-check.png" alt="Check settings"><br><sub>Settings: Check</sub></td>
-    <td><img src="docs/images/en/settings-lexicon.png" alt="Personal lexicon"><br><sub>Settings: Personal lexicon</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/en/menu.png" alt="Menu bar panel"><br><sub>Menu bar panel</sub></td>
-    <td></td>
-  </tr>
-</table>
+DeAI runs in the menu bar. Settings let you choose which apps and checks to enable, change underline styles, and switch between Chinese and English. Writing-pattern matches are editing suggestions, not a test of who wrote the text.
 
-## Privacy
+## App compatibility
 
-- All checks (grammar, AI tone, Markdown, lexicon) run locally in the bundled Rust core. Nothing you type is sent anywhere while checking.
-- When you trigger an AI rewrite, DeAI sends the text to rewrite, the matched issues, your lexicon entries and the selected rewrite skill to the provider you configured.
-- "Test connection" in Settings sends only a fixed probe message.
-- Rewrites stay on your Mac if you point DeAI at an Ollama or LM Studio server running locally.
-- DeAI has no telemetry and no account.
+DeAI reads and edits text through macOS Accessibility. The host app must expose both the text and its position on screen.
 
-## Requirements
+| App | Current status |
+| --- | --- |
+| Microsoft Word | Demonstrated with Word 16.113, including page-based text access. |
+| TextEdit, Apple Notes | Checking, suggestion cards and text replacement demonstrated. |
+| Chrome | Web-page text could not be read in testing; unsupported. |
+| Safari | Some input text could be read, but findings did not appear; unsupported. |
+| Other apps | Depends on their Accessibility implementation; not verified. |
 
-- macOS 14 Sonoma or later
-- Accessibility permission (System Settings → Privacy & Security → Accessibility), which DeAI needs to read text and draw underlines in other apps
-- An API key for a cloud provider, or a local Ollama / LM Studio server, if you want AI rewrites
+The browser group is experimental and disabled by default. Enabling it does not make browsers supported. Terminals and password managers on the [built-in exclusion list](mac/DeAI/Settings/AppGroups.swift) are never checked.
 
-## Build from source
+## Build and install
 
-Prerequisites: Xcode, [Rust](https://rustup.rs), [XcodeGen](https://github.com/yonaskolb/XcodeGen) and [Homebrew](https://brew.sh) (or install XcodeGen another way). Run all commands from the repository root.
+Build from source with Xcode, [Rust](https://rustup.rs) and [XcodeGen](https://github.com/yonaskolb/XcodeGen). Install XcodeGen with `brew install xcodegen` if you use Homebrew. Select the full Xcode installation as your active developer directory.
 
 ```sh
 git clone https://github.com/YouAI-Liu/deai-writer.git
 cd deai-writer
-
-# Rust core → universal static library + Swift bindings + DeAICore.xcframework
+source ~/.cargo/env
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ./core/scripts/build-apple.sh
 
-# Mac app
-brew install xcodegen
-(cd mac && xcodegen && xcodebuild -project DeAI.xcodeproj -scheme DeAI -configuration Release build)
+cd mac
+xcodegen
+xcodebuild -project DeAI.xcodeproj -scheme DeAI \
+  -configuration Release -derivedDataPath build/dd build
+mkdir -p ~/Applications
+rsync -a --delete build/dd/Build/Products/Release/DeAI.app/ ~/Applications/DeAI.app/
+open ~/Applications/DeAI.app
 ```
 
-The app ends up in `~/Library/Developer/Xcode/DerivedData/DeAI-*/Build/Products/Release/DeAI.app`. Copy it to `/Applications` or `~/Applications`.
+The Apple build script produces a universal library for Apple Silicon and Intel. Both trailing slashes in the `rsync` command matter: it updates the installed app's contents instead of nesting another app inside it.
 
-By default the Release build is ad-hoc signed. To sign with your own Apple Development identity, copy `mac/Local.xcconfig.example` to `mac/Local.xcconfig` and set your team.
-
-Tests:
-
-```sh
-(cd core && cargo test --workspace)
-(cd mac && xcodebuild -project DeAI.xcodeproj -scheme DeAI test)
-```
+Release builds use ad-hoc signing unless you copy [Local.xcconfig.example](mac/Local.xcconfig.example) to `mac/Local.xcconfig` and set your own Apple Development team before building. This local file is ignored by Git. Keep the installed app at the same path; a stable signing identity helps macOS retain its Accessibility permission across updates.
 
 ### First launch
 
-- Builds are not notarized. If macOS blocks DeAI from opening, go to **System Settings → Privacy & Security** and click **Open Anyway**.
-- Grant Accessibility permission when asked.
-- macOS remembers the Accessibility grant by code signature. With an ad-hoc signed build, every update has a new signature, so you may need to remove DeAI from the Accessibility list and grant it again.
+1. Open DeAI from `~/Applications`. Its controls appear in the menu bar.
+2. Grant access in **System Settings → Privacy & Security → Accessibility**. DeAI uses this permission to read text, position underlines and apply edits in other apps.
+3. Open a document in Word, TextEdit or Notes and start typing. Click an underline to see the suggested edit. You can also ignore a finding or disable its rule.
+4. For a longer passage, select it and press **Control + Option + R**. The shortcut is configurable in Settings.
 
-## Project structure
+Local checks work without an API key. If macOS blocks an unnotarized build, use **Open Anyway** in Privacy & Security. After an ad-hoc rebuild, you may need to remove DeAI from the Accessibility list and grant access again. For everyday use, launch the installed Release app; Debug uses a separate bundle ID.
 
+## Models and data
+
+To use AI rewrite, add a provider in Settings, enter its base URL, model ID and API key, then test the connection. Presets are available for OpenCode Go, OpenAI, Anthropic, DeepSeek, Gemini, Ollama and LM Studio. Custom endpoints can use OpenAI Chat Completions, OpenAI Responses or Anthropic Messages. The endpoint and model must support the selected format; a preset is not a guarantee that every model works.
+
+For Ollama or LM Studio, start the local server and enter the name of a model it serves. Their presets do not require an API key. Rewrite skills supply text instructions to the model; DeAI does not run scripts from imported skills.
+
+| Action | Data flow |
+| --- | --- |
+| Typing and local checks | Text is checked on your Mac by the Rust core. No model request is made. |
+| AI rewrite | DeAI sends the rewrite text, finding hints, valid personal lexicon entries and selected skill body to the configured endpoint. A card rewrite uses the paragraph containing the finding. |
+| Test connection | Sends a fixed probe message to that endpoint. |
+| Save settings | API keys go in macOS Keychain. Preferences, lexicon and imported skills are stored locally. |
+
+DeAI has no telemetry or DeAI account. A cloud endpoint receives rewrite content under that provider's data policy. For a local rewrite, use a server and model that actually run on your Mac; choosing a provider label alone does not establish where processing happens.
+
+## Screenshots
+
+| Suggestions | AI rewrite |
+| --- | --- |
+| ![Suggestion card](docs/images/en/card-light.png) | ![Rewrite comparison](docs/images/en/rewrite-panel.png) |
+| ![Personal lexicon](docs/images/en/settings-lexicon.png) | ![Rewrite skills](docs/images/en/settings-ai.png) |
+
+[More screenshots](docs/images/en)
+
+## Development
+
+```text
+core/    Rust checks, Harper integration, UniFFI and WASM bindings
+mac/     SwiftUI app, Accessibility integration, overlays and model client
+tools/   Accessibility inspection tool (ax-probe)
+docs/    Writing samples, demo and screenshots
 ```
-core/    Rust core: rule engine, Harper grammar, UniFFI bindings (deai-ffi), WASM build (deai-wasm)
-mac/     SwiftUI menu bar app (XcodeGen project in mac/project.yml)
-tools/   Developer tools, e.g. ax-probe for inspecting Accessibility trees
-docs/    Brand assets, screenshots, demo corpus
+
+After building the Apple library and generating the Xcode project above, run these from the repository root:
+
+```sh
+source ~/.cargo/env
+(cd core && cargo test --workspace)
+(cd mac && xcodebuild -project DeAI.xcodeproj -scheme DeAI \
+  -derivedDataPath build/dd test)
+
+# Optional WASM target; requires wasm-pack and Node.js
+(cd core/crates/deai-wasm && wasm-pack build --target nodejs && node tests/smoke.mjs)
+
+# Inspect an app's Accessibility tree after a three-second delay
+(cd tools/ax-probe && swift build && .build/debug/ax-probe 3)
 ```
 
-## Acknowledgements
+Finding offsets are UTF-16 code units. See [the rule reference](core/crates/deai-core/RULES.md) for matching behavior and [AGENTS.md](AGENTS.md) for build and Accessibility notes.
 
-DeAI builds on [Harper](https://github.com/Automattic/harper) for English grammar. The Chinese rules come from lieflat-less-ai-tone, and the English AI-tone rules from [blader/humanizer](https://github.com/blader/humanizer). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details and licenses.
+Bug reports and pull requests are welcome through this repository's Issues and Pull requests tabs. For an app compatibility issue, include the macOS and app versions, reproduction steps and a short non-sensitive text sample. For a rule change, include examples that should match and examples that should stay unchanged.
 
-## License
+## License and credits
 
-[MIT](LICENSE)
+DeAI is licensed under [MIT](LICENSE). English grammar comes from [Harper](https://github.com/Automattic/harper); Chinese writing rules derive from [lieflat-less-ai-tone](https://github.com/larashero3-dotcom/lieflat-less-ai-tone), and English writing rules from [blader/humanizer](https://github.com/blader/humanizer). Attribution, license texts and the dependency inventory are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

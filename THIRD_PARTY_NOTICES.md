@@ -6,7 +6,7 @@
 
 ### lieflat-less-ai-tone
 
-中文 AI 语气规则衍生自 `lieflat-less-ai-tone`，采用 MIT 许可证。以下保留其许可证原文：
+中文 AI 语气规则衍生自 [lieflat-less-ai-tone](https://github.com/larashero3-dotcom/lieflat-less-ai-tone)，采用 MIT 许可证。以下保留其许可证原文：
 
 ```text
 MIT License
@@ -588,3 +588,7 @@ for p in packages:
 ## Swift 与视觉资源
 
 应用未捆绑第三方 Swift packages、图片、图标或字体。应用图标为原创；界面使用系统提供的字体和 SF Symbols。
+
+## 演示中的应用图形
+
+演示视频与 GIF 中标注 Word、文本编辑和备忘录的三个图形为本项目手工编写的通用 SVG，采用仓库 MIT 许可证；它们替代了早期演示中提取的应用图标，不是官方品牌标志。可编辑源文件与说明见 [docs/demo/icons](docs/demo/icons/README.md)。应用名称用于标明兼容对象，相关名称归各自权利人所有。
