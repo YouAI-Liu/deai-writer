@@ -12,7 +12,7 @@ Windows 客户端独立于 `mac/`，使用 .NET 8 WPF 托盘 UI、UI Automation 
 ./windows/scripts/build.ps1 -Test -Installer
 ```
 
-脚本通过 vswhere/vcvars64 初始化 MSVC，构建 `deai-native` release DLL，执行整个 Rust 工作区测试、.NET 构建/格式检查、单元测试与跨进程 WPF UIA fixture，最后生成 self-contained `win-x64` 客户端与安装程序。UIA 回归需要已登录的交互桌面；无交互桌面的 CI 使用 `-SkipUia`，不会据此声称 UIA 通过。
+脚本通过 vswhere/vcvars64 初始化 MSVC，构建 `deai-native` release DLL，执行整个 Rust 工作区测试、.NET 构建/格式检查、单元测试与跨进程 WPF UIA fixture，最后生成 self-contained `win-x64` 客户端与安装程序。Windows x64 原生 DLL 静态链接 CRT，不要求另行安装 Visual C++ Redistributable；不改变其他 Rust target 的链接配置。UIA 回归需要已登录的交互桌面；无交互桌面的 CI 使用 `-SkipUia`，不会据此声称 UIA 通过。
 
 ```powershell
 # 快速 .NET 回归（先构建 Rust DLL）

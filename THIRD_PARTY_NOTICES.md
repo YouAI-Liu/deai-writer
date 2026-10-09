@@ -622,3 +622,5 @@ SOFTWARE.
 ```
 
 The self-contained Windows client includes Microsoft .NET 8 runtime and `System.Security.Cryptography.ProtectedData` under the .NET MIT license; runtime third-party notices are shipped by the publish output. See https://github.com/dotnet/runtime/blob/v8.0.31/LICENSE.TXT and https://github.com/dotnet/runtime/blob/v8.0.31/THIRD-PARTY-NOTICES.TXT.
+
+The Windows x64 native bridge statically links the Microsoft Visual C++ runtime; its redistribution is subject to the Visual Studio Build Tools license. See https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170.
