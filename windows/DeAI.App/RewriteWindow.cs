@@ -28,8 +28,8 @@ internal sealed class RewriteWindow : Window
             send!.IsEnabled = false;
             try
             {
-                if (preferences.Provider != controller.Preferences.Provider) throw new InvalidOperationException("服务配置已变化，请重新打开改写窗口。");
                 await controller.ValidateTarget(target);
+                if (preferences.Provider != controller.Preferences.Provider) throw new InvalidOperationException("服务配置已变化，请重新打开改写窗口。");
                 var key = controller.Secrets.Read(); if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException(Ui.L("请先在设置中保存 API Key。", "Save an API key in Settings first."));
                 status.Text = Ui.L("正在请求；取消会中止请求，原文不变。", "Requesting; Cancel stops the request without changing the source.");
                 using var client = new RewriteClient();

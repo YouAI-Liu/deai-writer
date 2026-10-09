@@ -116,6 +116,7 @@ internal sealed class Controller : IDisposable
     {
         var preferences = Preferences;
         await worker.Run(_ => { if (!target.IsAllowed(preferences.BrowsersEnabled, preferences.ExcludedApps)) throw new InvalidOperationException("目标已被应用策略排除。"); target.Validate(); return true; });
+        if (preferences != Preferences) throw new InvalidOperationException("设置已变化，请重新检查。");
     }
     public async Task<bool> Apply(TextTarget target, int start, int end, string replacement)
     {

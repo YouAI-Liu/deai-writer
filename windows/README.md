@@ -50,7 +50,8 @@ AI 支持 OpenAI Chat Completions、Responses、Anthropic Messages 和兼容的�
 | 合成 PasswordBox | 拒绝读取 |
 | 合成 RichTextBox / Document | 只读、定位；拒绝自动写回，防止破坏格式 |
 | Win32 Edit | 实现受限 ValuePattern 写回，**第三方应用尚未验证** |
-| Word / Office / Notepad / 第三方编辑器 | **未验证，不承诺兼容**；只支持满足安全能力判定的目标 |
+| classic Notepad 10.0.20348.1（Server 2022） | 合成新文档读取、emoji 后 UTF-16 定位、复制通过；目标只读，**自动写回不可用** |
+| Word / Office / 现代 Notepad / 第三方编辑器 | **未验证，不承诺兼容**；只支持满足安全能力判定的目标 |
 | Chrome / Edge / Firefox 等浏览器 | 默认不读取；设置可实验性开启，但浏览器/富文本写回未验证 |
 | 终端、常见密码管理器、DeAI 自身 | 按进程策略排除；任意 UIA 密码字段也会拒绝 |
 | 提权窗口、安全桌面、远程桌面断开/锁屏 | 未验证/可能不可访问，不请求 uiAccess 或管理员权限 |
