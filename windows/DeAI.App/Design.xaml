@@ -119,7 +119,14 @@
   </Style>
   <Style TargetType="ToolTip"><Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="Background" Value="{DynamicResource SurfaceBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="FontSize" Value="11" /><Setter Property="Padding" Value="8,5" /></Style>
   <Style TargetType="Expander"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /><Setter Property="FontSize" Value="11" /></Style>
-  <Style TargetType="ContextMenu"><Setter Property="Background" Value="{DynamicResource SurfaceBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="Padding" Value="4" /><Setter Property="FontSize" Value="12" /></Style>
+  <Style TargetType="ContextMenu">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="Padding" Value="4" /><Setter Property="FontSize" Value="12" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu">
+      <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0.5" CornerRadius="8" Padding="{TemplateBinding Padding}">
+        <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" /></ScrollViewer>
+      </Border>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
   <Style TargetType="MenuItem">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="Padding" Value="12,7" />
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">

@@ -379,6 +379,7 @@ internal sealed class HotkeyRecorder : Button
     public void Restore(Hotkey value) { Value = value; Content = Display(value); }
     public HotkeyRecorder(Controller controller, Hotkey value, string id, Action changed)
     {
+        Style = (Style)Application.Current.FindResource(typeof(Button));
         Value = value; Content = Display(value); AutomationProperties.SetAutomationId(this, id);
         Click += (_, _) =>
         {
