@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><UseWPF>true</UseWPF></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../DeAI.Core/DeAI.Core.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="../DeAI.App/Hotkeys.cs" Link="Hotkeys.cs" /></ItemGroup>
+</Project>

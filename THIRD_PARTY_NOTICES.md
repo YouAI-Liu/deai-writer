@@ -592,3 +592,33 @@ for p in packages:
 ## 演示中的应用图形
 
 演示视频与 GIF 中标注 Word、文本编辑和备忘录的三个图形为本项目手工编写的通用 SVG，采用仓库 MIT 许可证；它们替代了早期演示中提取的应用图标，不是官方品牌标志。可编辑源文件与说明见 [docs/demo/icons](docs/demo/icons/README.md)。应用名称用于标明兼容对象，相关名称归各自权利人所有。
+
+## Windows client
+
+`Interop.UIAutomationClient` 10.19041.0 ([UIAutomation-Interop](https://github.com/Roemer/UIAutomation-Interop)) uses the following MIT license:
+
+```text
+MIT License
+
+Copyright (c) 2019 Roman
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The self-contained Windows client includes Microsoft .NET 8 runtime and `System.Security.Cryptography.ProtectedData` under the .NET MIT license; runtime third-party notices are shipped by the publish output. See https://github.com/dotnet/runtime/blob/v8.0.31/LICENSE.TXT and https://github.com/dotnet/runtime/blob/v8.0.31/THIRD-PARTY-NOTICES.TXT.
