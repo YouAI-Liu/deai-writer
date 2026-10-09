@@ -13,6 +13,7 @@ public static class Program
         using var mutex = new Mutex(true, "Local\\DeAI.Windows", out var first);
         if (!first) { MessageBox.Show("DeAI 已在托盘运行 / Already running in the system tray."); return; }
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        Ui.Initialize();
         Controller? controller = null;
         app.Startup += (_, _) =>
         {

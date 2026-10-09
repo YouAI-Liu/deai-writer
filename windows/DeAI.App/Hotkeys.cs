@@ -46,8 +46,13 @@ public sealed class Hotkeys : IDisposable
     }
     public void Dispose()
     {
-        if (checkId != 0) { UnregisterHotKey(source.Handle, checkId); UnregisterHotKey(source.Handle, rewriteId); }
+        Suspend();
         source.Dispose();
+    }
+    public void Suspend()
+    {
+        if (checkId != 0) { UnregisterHotKey(source.Handle, checkId); UnregisterHotKey(source.Handle, rewriteId); }
+        checkId = rewriteId = 0; checkKey = rewriteKey = null;
     }
     [DllImport("user32.dll", SetLastError = true)] private static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
     [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hwnd, int id);

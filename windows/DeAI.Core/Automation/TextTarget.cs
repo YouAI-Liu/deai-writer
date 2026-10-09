@@ -45,11 +45,12 @@ public sealed class TextTarget
         Selection = ReadSelection();
     }
 
-    public static TextTarget? Focused(IUIAutomation automation, bool browsersEnabled = false, IEnumerable<string>? excluded = null)
+    public static TextTarget? Focused(IUIAutomation automation, bool browsersEnabled = false, IEnumerable<string>? excluded = null, Func<string, bool>? processAllowed = null)
     {
         var focused = automation.GetFocusedElement();
         if (focused == null) return null;
         if (!AppPolicy.IsAllowed(focused.CurrentProcessId, browsersEnabled, excluded)) return null;
+        if (processAllowed != null && !processAllowed(AppPolicy.ProcessName(focused.CurrentProcessId))) return null;
         for (var node = focused; node != null; node = automation.ControlViewWalker.GetParentElement(node))
         {
             if (node.CurrentIsPassword != 0) return null;

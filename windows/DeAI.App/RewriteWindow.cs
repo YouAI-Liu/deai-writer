@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Automation;
@@ -10,47 +13,132 @@ namespace DeAI.App;
 internal sealed class RewriteWindow : Window
 {
     private readonly CancellationTokenSource cancellation = new();
+    private readonly Controller controller;
+    private readonly TextTarget target;
+    private readonly TextSpan scope;
+    private readonly Skill skill;
+    private readonly Preferences preferences;
+    private readonly string source;
+    private readonly StackPanel body, state = new(), remember = new();
+    private readonly TextBox output;
+    private readonly Button send, apply, copy, retry;
+    private readonly TextBlock status;
+    private bool requesting, saved, applying, requested;
+    private readonly ProgressBar progress = new() { IsIndeterminate = true, Height = 3, Margin = new Thickness(0, 8, 0, 12), Visibility = Visibility.Collapsed };
     public RewriteWindow(Controller controller, TextTarget target, TextSpan scope, Skill skill)
     {
-        Title = "DeAI — " + Ui.L("AI 改写预览", "AI rewrite preview"); Width = 780; Height = 620; MinWidth = 600; MinHeight = 520; Ui.Style(this);
-        var preferences = controller.Preferences; var source = target.Original[scope.Start..scope.End];
-        var panel = new DockPanel { Margin = new Thickness(24) }; var header = new StackPanel();
-        header.Children.Add(Ui.Label(Ui.L("改写前先确认", "Review before rewriting"), 24));
-        header.Children.Add(Ui.Label(RewriteClient.Endpoint(preferences.Provider).Host + " · " + preferences.Provider.Model + " · " + skill.Name));
-        header.Children.Add(Ui.Label(Ui.L("点击“发送并改写”会发送以下原文、所选 Skill 和个人词库到该服务。不会发送整个控件的其他文本；建议需再次确认才能写回。", "Send transmits the source below, selected Skill and personal lexicon to this provider. Other target text is not sent. Applying requires another confirmation.")));
-        DockPanel.SetDock(header, Dock.Top); panel.Children.Add(header);
-        var footer = new StackPanel(); var status = Ui.Label(""); footer.Children.Add(status); var actions = new WrapPanel();
-        var output = Ui.Text("", "RewriteOutput", true); output.IsReadOnly = true;
-        var apply = Ui.Button(Ui.L("接受并安全写回", "Accept and apply"), async () => { if (await controller.Apply(target, scope.Start, scope.End, output.Text)) Close(); }, "AcceptRewrite"); apply.IsEnabled = false;
-        Button? send = null;
-        send = Ui.Button(Ui.L("发送并改写", "Send and rewrite"), async () =>
+        this.controller = controller; this.target = target; this.scope = scope; this.skill = skill;
+        preferences = controller.Preferences; source = target.Original[scope.Start..scope.End];
+        Title = "DeAI — " + Ui.L("AI 改写", "AI rewrite");
+        body = Ui.Panel(this, Ui.RewriteWidth);
+        ShowActivated = true;
+        var close = Ui.Icon("×", Ui.L("关闭", "Close"), Close, "CloseRewrite");
+        var header = Ui.Row(Ui.Title(Ui.L("AI 改写", "AI rewrite"), 18), close);
+        header.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 1 && e.OriginalSource is TextBlock) DragMove(); };
+        body.Children.Add(header);
+        var sourceLabel = Ui.Label(Ui.L("原文", "Original"), 11, "Muted"); sourceLabel.Margin = new Thickness(0, 18, 0, 8); body.Children.Add(sourceLabel);
+        var original = Ui.Text(source, "RewriteOriginal", true);
+        original.IsReadOnly = true; original.Height = 110; original.FontSize = 13; body.Children.Add(original);
+        var divider = Ui.Separator(); divider.Margin = new Thickness(0, 16, 0, 16); body.Children.Add(divider);
+        output = Ui.Text("", "RewriteOutput", true); output.IsReadOnly = true; output.Height = 160;
+        Ui.Color(output, Control.BackgroundProperty, "Background"); output.BorderThickness = new Thickness(0); output.Padding = new Thickness(0);
+        state.Children.Add(Ui.Label(Ui.L("改写", "Rewrite"), 11, "Muted")); state.Children.Add(progress); state.Children.Add(output); body.Children.Add(state);
+        status = Ui.Label("", 11, "Muted"); status.Margin = new Thickness(0, 8, 0, 12);
+        AutomationProperties.SetAutomationId(status, "RewriteStatus"); body.Children.Add(status);
+        body.Children.Add(remember);
+        var separator = Ui.Separator(); separator.Margin = new Thickness(0, 12, 0, 16); body.Children.Add(separator);
+        var actions = new WrapPanel();
+        send = Ui.Button(Ui.L("发送并改写", "Send and rewrite"), async () => await Request(), "SendRewrite", "PrimaryButton");
+        apply = Ui.Button(Ui.L("替换", "Replace"), async () =>
         {
-            send!.IsEnabled = false;
+            if (requesting || applying) return;
+            applying = true; RefreshActions(true);
+            if (await controller.Apply(target, scope.Start, scope.End, output.Text)) Close();
+            else { applying = false; RefreshActions(); }
+        }, "AcceptRewrite", "PrimaryButton");
+        copy = Ui.Button(Ui.L("复制", "Copy"), () => { if (output.Text.Length > 0) Clipboard.SetText(output.Text); }, "CopyRewrite");
+        retry = Ui.Button(Ui.L("重试", "Retry"), async () => await Request(), "RetryRewrite");
+        actions.Children.Add(send); actions.Children.Add(apply); actions.Children.Add(copy); actions.Children.Add(retry);
+        actions.Children.Add(Ui.Button(Ui.L("取消", "Cancel"), Close, "CancelRewrite", "FlatButton"));
+        foreach (FrameworkElement child in actions.Children) child.Margin = new Thickness(0, 0, 8, 0);
+        body.Children.Add(actions);
+        output.Visibility = Visibility.Collapsed; state.Visibility = Visibility.Collapsed;
+        status.Text = RewriteClient.Endpoint(preferences.Provider).Host + " · " + preferences.Provider.Model + "\n" +
+            Ui.L("仅发送上面的原文、所选 Skill 和个人词库。结果需确认后才写回。", "Only the source above, selected Skill and lexicon are sent. Confirm the result before applying.");
+        RefreshActions();
+        new PanelBehavior(this, () => { if (!requesting && !applying) Close(); }, () => requesting || applying);
+        Closed += (_, _) => cancellation.Cancel();
+    }
+    private async Task Request()
+    {
+        if (requesting || applying) return;
+        requesting = true; requested = true; saved = false; output.Text = ""; remember.Children.Clear(); RefreshActions();
+        progress.Visibility = Visibility.Visible; Ui.Color(status, TextBlock.ForegroundProperty, "Muted");
+        state.Visibility = Visibility.Visible; output.Visibility = Visibility.Collapsed;
+        status.Text = Ui.L("正在改写… 取消会中止请求，原文不变。", "Rewriting… Cancel stops the request; source unchanged.");
+        try
+        {
+            await controller.ValidateTarget(target);
+            if (preferences.Provider != controller.Preferences.Provider || preferences.ActiveProviderId != controller.Preferences.ActiveProviderId) throw new InvalidOperationException(Ui.L("服务配置已变化，请重新打开改写窗口。", "Provider changed. Reopen the rewrite panel."));
+            var key = controller.Secrets.Read();
+            if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException(Ui.L("请先在设置中保存 API Key。", "Save an API key in Settings first."));
+            using var client = new RewriteClient();
+            var result = await client.RewriteAsync(preferences.Provider, key, source, skill, controller.Lexicon, cancellation.Token);
+            if (cancellation.IsCancellationRequested) return;
+            output.Text = result; output.Visibility = Visibility.Visible;
+            status.Text = result == source ? Ui.L("原文已很自然，无需改写。", "Already natural. No changes needed.")
+                : target.CanWrite ? Ui.L("确认后将再次校验原文并替换。", "Replace rechecks the original before writing.")
+                : Ui.L("此目标只读；可复制结果，不能自动替换。", "Read-only target. Copy the result; automatic replacement is unavailable.");
+            BuildRemember(result);
+        }
+        catch (OperationCanceledException) { status.Text = Ui.L("已取消或超时，原文不变。", "Cancelled or timed out; source unchanged."); }
+        catch (Exception error)
+        {
+            status.Text = error is InvalidOperationException ? error.Message : Ui.L("改写失败，请检查服务配置后重试。原文未修改。", "Rewrite failed. Check your provider and retry. Source unchanged.");
+            Ui.Color(status, TextBlock.ForegroundProperty, "Danger");
+        }
+        finally { requesting = false; progress.Visibility = Visibility.Collapsed; if (!cancellation.IsCancellationRequested) RefreshActions(); }
+    }
+    private void RefreshActions(bool allDisabled = false)
+    {
+        var hasResult = output.Text.Length > 0;
+        send.Visibility = requested ? Visibility.Collapsed : Visibility.Visible;
+        send.IsEnabled = !allDisabled && !requesting;
+        apply.Visibility = hasResult && output.Text != source ? Visibility.Visible : Visibility.Collapsed;
+        apply.IsEnabled = !allDisabled && !requesting && target.CanWrite;
+        copy.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed; copy.IsEnabled = !allDisabled && !requesting;
+        retry.Visibility = requested ? Visibility.Visible : Visibility.Collapsed; retry.IsEnabled = !allDisabled && !requesting;
+    }
+    private void BuildRemember(string result)
+    {
+        remember.Children.Clear(); if (result == source) return;
+        var pairs = RewriteDiff.Pairs(source, result).Where(p => p.Candidate() != null).ToArray();
+        if (pairs.Length == 0)
+        {
+            remember.Children.Add(Ui.Label(Ui.L("本次改写无法拆成简短词条，请在个人词库中手动添加。", "No short word pairs to learn. Add a lexicon entry manually."), 10, "Muted")); return;
+        }
+        var list = new StackPanel();
+        var options = new List<(CheckBox Check, RewritePair Pair)>();
+        foreach (var pair in pairs)
+        {
+            var check = new CheckBox { Content = pair.From + " → " + (pair.To.Length == 0 ? Ui.L("（删除）", "(Delete)") : pair.To), IsChecked = false, Margin = new Thickness(0, 4, 0, 4), FontSize = 11 };
+            options.Add((check, pair)); list.Children.Add(check);
+        }
+        Button? add = null;
+        add = Ui.Button(Ui.L("加入词库", "Add to lexicon"), () =>
+        {
+            if (saved || applying) return;
             try
             {
-                await controller.ValidateTarget(target);
-                if (preferences.Provider != controller.Preferences.Provider) throw new InvalidOperationException("服务配置已变化，请重新打开改写窗口。");
-                var key = controller.Secrets.Read(); if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException(Ui.L("请先在设置中保存 API Key。", "Save an API key in Settings first."));
-                status.Text = Ui.L("正在请求；取消会中止请求，原文不变。", "Requesting; Cancel stops the request without changing the source.");
-                using var client = new RewriteClient();
-                var result = await client.RewriteAsync(preferences.Provider, key, source, skill, controller.Lexicon, cancellation.Token);
-                if (cancellation.IsCancellationRequested) return;
-                output.Text = result; apply.IsEnabled = target.CanWrite;
-                status.Text = target.CanWrite ? Ui.L("请对照左右原文/结果；确认后写回会再次校验原文。", "Compare original and result. Apply rechecks the source.") : Ui.L("此目标只读；只能手动复制结果。", "Read-only target; copy the result manually.");
+                var entries = options.Where(p => p.Check.IsChecked == true).Select(p => p.Pair.Candidate()!).ToArray();
+                if (entries.Length == 0) return;
+                controller.SaveLexicon(controller.Lexicon.Concat(entries).Distinct().ToArray());
+                saved = true; add!.Content = Ui.L("已加入词库", "Added to lexicon"); add.IsEnabled = false;
             }
-            catch (OperationCanceledException) { status.Text = Ui.L("已取消或超时，原文不变。", "Cancelled/timed out; source unchanged."); }
             catch (Exception error) { Ui.Error(error); }
-            finally { if (!cancellation.IsCancellationRequested) send.IsEnabled = true; }
-        }, "SendRewrite");
-        actions.Children.Add(send); actions.Children.Add(apply);
-        actions.Children.Add(Ui.Button(Ui.L("复制结果", "Copy result"), () => { if (output.Text.Length > 0) Clipboard.SetText(output.Text); }, "CopyRewrite"));
-        actions.Children.Add(Ui.Button(Ui.L("取消", "Cancel"), Close, "CancelRewrite")); footer.Children.Add(actions);
-        DockPanel.SetDock(footer, Dock.Bottom); panel.Children.Add(footer);
-        var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition());
-        var left = new StackPanel { Margin = new Thickness(0, 0, 12, 0) }; left.Children.Add(Ui.Label(Ui.L("原文", "Original")));
-        var original = Ui.Text(source, "RewriteOriginal", true); original.IsReadOnly = true; original.Height = 260; left.Children.Add(original);
-        var right = new StackPanel(); right.Children.Add(Ui.Label(Ui.L("改写结果", "Result"))); output.Height = 260; right.Children.Add(output);
-        grid.Children.Add(left); Grid.SetColumn(right, 1); grid.Children.Add(right); panel.Children.Add(grid); Content = panel;
-        Closed += (_, _) => cancellation.Cancel();
+        }, "RememberRewrite");
+        list.Children.Add(add);
+        var expander = new Expander { Header = Ui.L("记住改法", "Remember changes"), Content = list, IsExpanded = true };
+        AutomationProperties.SetAutomationId(expander, "RememberChanges"); remember.Children.Add(expander);
     }
 }

@@ -26,6 +26,8 @@ windows/DeAI.Tests/bin/x64/Release/net8.0-windows/DeAI.Tests.exe windows/DeAI.Fi
 
 ## 使用
 
+界面沿用 Mac 的暖白/炭灰设计 token、自绘圆角控件、260px 建议卡内容和 420px 纵向改写面板。560×660 设置分为「检查 / 下划线外观 / AI 改写 / 个人」，支持应用组策略、各类下划线的形状/颜色、粗细/透明度/偏移、低置信度淡化和高亮填充；托盘使用自绘菜单。颜色随 Windows 应用主题变化（高对比度使用系统颜色）。系统标题栏、字体渲染和 Ctrl/Alt/Win 快捷键仍使用 Windows 行为；未宣称与 macOS 逐像素一致。
+
 1. 启动后打开设置；托盘菜单提供设置、检查/改写和退出。
 2. 在目标编辑框中放置光标。`Ctrl+Alt+F9` 检查，`Ctrl+Alt+F10` 改写；可在设置中修改。冲突时拒绝变更，保留原快捷键。
 3. 本地检查约每 1.2 秒读取当前焦点；不遍历其他应用、不发送网络请求。建议卡可以定位/选区、复制、忽略、禁用规则或对受支持目标应用应用替换。
@@ -38,7 +40,7 @@ AI 支持 OpenAI Chat Completions、Responses、Anthropic Messages 和兼容的�
 
 改写范围排除选区首尾的 CR/LF 或 Unicode 段落分隔符，保留与未选中段落之间的边界。结果按原文换行风格归一化；如果 AI 合并或新增段落，拒绝该结果，不允许写回。
 
-密钥单独存放在 `%LOCALAPPDATA%\DeAI\provider-key.dpapi`，用 DPAPI **CurrentUser** 加密；不会进入 settings.json/源码/日志。DPAPI 不防同用户恶意进程，不是通用跨平台同步密钥方案。替换服务地址但保留已有密钥时需要确认。
+AI 服务可保存多个配置，每个配置的密钥单独用 DPAPI **CurrentUser** 加密：旧默认配置仍使用 `%LOCALAPPDATA%\DeAI\provider-key.dpapi`，新增配置使用 `provider-key-{profileId}.dpapi`，不会进入 settings.json/源码/日志。旧设置、词库及默认密钥文件向后兼容。DPAPI 不防同用户恶意进程，不是通用跨平台同步密钥方案。替换服务地址但保留已有密钥时需要确认。
 
 ## 安全边界与兼容范围
 

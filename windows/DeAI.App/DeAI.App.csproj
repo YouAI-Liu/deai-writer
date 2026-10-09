@@ -5,7 +5,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>DeAI</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>deai.ico</ApplicationIcon>
     <Version>0.1.0</Version>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../DeAI.Core/DeAI.Core.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../DeAI.Core/DeAI.Core.csproj" /><EmbeddedResource Include="deai.ico" LogicalName="DeAI.ico" /></ItemGroup>
 </Project>
