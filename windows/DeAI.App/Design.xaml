@@ -50,7 +50,7 @@
     <Setter Property="Background" Value="{DynamicResource SidebarBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="BorderThickness" Value="0.5" /><Setter Property="Padding" Value="12" />
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
       <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="8" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+        <ScrollViewer x:Name="PART_ContentHost" />
       </Border>
       <ControlTemplate.Triggers>
         <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter TargetName="Body" Property="BorderThickness" Value="1" /></Trigger>
@@ -62,7 +62,7 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="Background" Value="{DynamicResource SidebarBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="Padding" Value="12" />
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="PasswordBox">
       <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="8" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0.5">
-        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+        <ScrollViewer x:Name="PART_ContentHost" />
       </Border>
       <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger></ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>
@@ -84,7 +84,7 @@
         <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
           <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
             <Border CornerRadius="8" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0.5">
-              <TextBlock Text="⌄" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
+              <TextBlock Text="⌄" Foreground="{DynamicResource SecondaryTextBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
             </Border>
           </ControlTemplate></ToggleButton.Template>
         </ToggleButton>

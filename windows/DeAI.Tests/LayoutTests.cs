@@ -27,7 +27,11 @@ internal static class LayoutTests
                 {
                     Ui.RefreshTheme(dark);
                     var theme = dark ? "dark" : "light";
-                    if (nativeWindow) Check(theme + " native panel growth and movement refit the working area", NativeBounds);
+                    if (nativeWindow)
+                    {
+                        Check(theme + " native editor proportions and dropdown arrow", NativeEditors);
+                        Check(theme + " native panel growth and movement refit the working area", NativeBounds);
+                    }
                     Check(theme + " learn action requires a selection and stays disabled after saving", () =>
                     {
                         var choices = new[] { new CheckBox(), new CheckBox() };
@@ -188,6 +192,28 @@ internal static class LayoutTests
             scroll.ScrollToEnd(); Drain(); AssertBounds();
             Require(scroll.VerticalOffset > 0, "Native panel cannot scroll to its end");
             expander.IsExpanded = false; Drain(); AssertBounds();
+        }
+        finally { window.Close(); Drain(); }
+    }
+    private static void NativeEditors()
+    {
+        var text = Ui.Text("Synthetic value");
+        var password = new PasswordBox { Password = "x" };
+        var combo = new ComboBox { ItemsSource = new[] { "Synthetic choice" }, SelectedIndex = 0 };
+        var stack = new StackPanel { Margin = new Thickness(16) };
+        stack.Children.Add(text); stack.Children.Add(password); stack.Children.Add(combo);
+        var window = new Window { Content = stack, Width = 320, SizeToContent = SizeToContent.Height };
+        Ui.Style(window);
+        try
+        {
+            window.Show(); Drain();
+            Require(text.ActualHeight >= 34 && text.ActualHeight <= 42 &&
+                    password.ActualHeight >= 34 && password.ActualHeight <= 42 &&
+                    Math.Abs(text.ActualHeight - combo.ActualHeight) <= 8 &&
+                    Math.Abs(password.ActualHeight - combo.ActualHeight) <= 8,
+                $"Single-line editors mismatch dropdown: {text.ActualHeight}/{password.ActualHeight}/{combo.ActualHeight}");
+            var arrow = Find<TextBlock>(Find<ToggleButton>(combo));
+            Equal(((SolidColorBrush)Ui.Brush("SecondaryText")).Color, ((SolidColorBrush)arrow.Foreground).Color);
         }
         finally { window.Close(); Drain(); }
     }

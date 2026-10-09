@@ -29,7 +29,7 @@ internal sealed class SettingsWindow : Window
     private readonly TextBlock keyStatus = Ui.Label("", 11, "Muted"), providerStatus = Ui.Label("", 11, "Muted"), wordStatus = Ui.Label("", 11, "Danger");
     private readonly TextBox skillBody = Ui.Text("", "SkillPreview", true);
     private readonly Slider thickness = new() { Minimum = 0.5, Maximum = 4 }, opacity = new() { Minimum = 0.2, Maximum = 1 }, offset = new() { Minimum = -2, Maximum = 4 };
-    private readonly UnderlineView preview = new() { Height = 22, Category = "grammar" };
+    private readonly UnderlineView preview = new() { Height = 14, Category = "grammar", HorizontalAlignment = HorizontalAlignment.Center };
     private readonly HotkeyRecorder checkKey, rewriteKey;
     private TextBox excluded = null!, disabled = null!;
     private byte sensitivity;
@@ -194,7 +194,12 @@ internal sealed class SettingsWindow : Window
     private static string[] Lines(TextBox text) => text.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     private void BuildAppearance(StackPanel page, UnderlineAppearance value)
     {
-        var sample = Ui.Section(page, Ui.L("预览", "Preview")); Add(sample, Ui.Label(Ui.L("这是一段用于预览的文字", "A sentence for previewing underlines"), 15)); sample.Children.Add(preview);
+        var sample = Ui.Section(page, Ui.L("预览", "Preview"));
+        var sampleText = Ui.Label(Ui.L("这是一段用于预览的文字", "A sentence for previewing underlines"), 15);
+        sampleText.HorizontalAlignment = HorizontalAlignment.Center;
+        sample.Children.Add(sampleText);
+        preview.SetBinding(WidthProperty, new Binding(nameof(ActualWidth)) { Source = sampleText });
+        sample.Children.Add(preview);
         var categories = Ui.Section(page, Ui.L("分类样式", "Category styles"));
         foreach (var category in Categories)
         {
