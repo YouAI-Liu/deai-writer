@@ -388,13 +388,15 @@ internal sealed class HotkeyRecorder : Button
             dialog.Content = Ui.Label(Ui.L("按下 Ctrl / Alt / Shift / Win + 字母或功能键。Esc 取消。", "Press Ctrl / Alt / Shift / Win + a letter or function key. Esc cancels."), 13);
             dialog.PreviewKeyDown += (_, e) =>
             {
+                e.Handled = true;
                 var pressed = e.Key == Key.System ? e.SystemKey : e.Key; if (pressed == Key.Escape) { dialog.Close(); return; }
                 if (pressed is Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin) return;
                 var modifiers = Keyboard.Modifiers; var key = (uint)KeyInterop.VirtualKeyFromKey(pressed);
                 var flags = (uint)(((modifiers & ModifierKeys.Alt) != 0 ? 1 : 0) | ((modifiers & ModifierKeys.Control) != 0 ? 2 : 0) | ((modifiers & ModifierKeys.Shift) != 0 ? 4 : 0) | ((modifiers & ModifierKeys.Windows) != 0 ? 8 : 0));
                 if (flags == 0 || key is < 0x30 or > 0x87) return;
-                Value = new(flags, key); Content = Display(Value); e.Handled = true; dialog.Close();
+                Value = new(flags, key); Content = Display(Value); dialog.Close();
             };
+            dialog.PreviewKeyUp += (_, e) => e.Handled = true;
             dialog.ShowDialog(); pause.Dispose(); changed();
         };
     }
