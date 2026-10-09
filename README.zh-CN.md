@@ -38,6 +38,12 @@ DeAI 通过 macOS 辅助功能读取和修改文字，需要目标应用提供�
 
 ## 构建与安装
 
+目前没有发布 GitHub Release 或现成安装包，也没有上架 App Store。现在可以从源码构建；下方也说明了以后收到完整试用包时的安装方法。
+
+最低系统要求为 macOS 14。当前核验的 Release 产物包含 Apple Silicon 和 Intel 两种架构，使用 ad-hoc（临时）签名，未经过 Apple 公证。尚未完成另一台 Mac 从首次下载、授权到实际使用的完整验证，也未分别完成两种架构的首次安装验证。
+
+### 从源码构建
+
 从源码构建需要 Xcode、[Rust](https://rustup.rs) 和 [XcodeGen](https://github.com/yonaskolb/XcodeGen)。使用 Homebrew 的话，可以运行 `brew install xcodegen`。请将完整的 Xcode 安装设为当前开发工具目录。
 
 ```sh
@@ -58,16 +64,32 @@ open ~/Applications/DeAI.app
 
 Apple 构建脚本生成同时包含 Apple Silicon 和 Intel 架构的通用库。`rsync` 两端路径末尾的斜杠都要保留，这样会更新已安装应用的内容，不会在里面再嵌套一个应用。
 
-Release 默认使用 ad-hoc 签名。如需使用自己的 Apple Development 身份，在构建前将 [Local.xcconfig.example](mac/Local.xcconfig.example) 复制为 `mac/Local.xcconfig`，填入自己的开发者团队。这个本地文件已被 Git 忽略。保持安装路径不变，并使用稳定的签名身份，有助于 macOS 在更新后保留辅助功能授权。
+Release 默认使用 ad-hoc 签名。如需使用自己的 Apple Development 身份，在构建前将 [Local.xcconfig.example](mac/Local.xcconfig.example) 复制为 `mac/Local.xcconfig`，填入自己的开发者团队。这个本地文件已被 Git 忽略。Apple Development 是开发签名，不等于用于对外分发的 [Developer ID 签名](https://developer.apple.com/developer-id/)，也不代表应用已公证。
+
+### 收到完整试用包时
+
+如果以后从项目维护者处收到完整的 `DeAI.app`，先解压，再将应用放入“应用程序”（`/Applications` 或 `~/Applications`），从这个固定位置打开。完整应用不需要接收方安装 Xcode 或 Rust。请以实际提供的包和说明为准，目前没有可下载的试用包链接。
+
+### macOS 阻止首次打开时
+
+未经公证的应用首次打开可能被 Gatekeeper 阻止。如果提示开发者无法验证，或 Apple 无法检查是否包含恶意软件，请先确认来源可信、应用未被篡改，再按照 [Apple 官方说明](https://support.apple.com/en-gb/102445)操作：
+
+1. 尝试打开应用后，进入 **系统设置 → 隐私与安全性**。
+2. 找到对应的拦截提示，点击 **仍要打开**。
+3. 在再次出现的确认框中点击 **打开**。
+
+如果提示应用含恶意软件、会损坏电脑、已损坏，或发现签名异常，请停止安装并联系维护者核实，不要将这些提示一律当作“未公证”处理。
 
 ### 首次使用
 
-1. 从 `~/Applications` 打开 DeAI，在菜单栏找到它。
-2. 在 **系统设置 → 隐私与安全性 → 辅助功能** 中授权。DeAI 需要这项权限来读取其他应用的文字、定位下划线和应用修改。
+1. 从安装位置打开 DeAI，在菜单栏找到它。
+2. 在 **系统设置 → 隐私与安全性 → 辅助功能** 中添加并启用这个 `DeAI.app`。DeAI 需要这项权限来读取其他应用的文字、定位下划线和应用修改。
 3. 打开 Word、文本编辑或备忘录并输入文字。点击下划线查看建议，也可以忽略该问题或停用对应规则。
 4. 想集中检查一段文字时，选中后按 **Control + Option + R**。快捷键可在设置里修改。
 
-本地检查不需要 API 密钥。如果 macOS 阻止打开未经公证的构建，可在“隐私与安全性”中选择“仍要打开”。ad-hoc 签名的应用重新构建后，可能需要从辅助功能列表移除再重新授权。日常使用请启动安装好的 Release 应用；Debug 使用独立的 bundle ID。
+本地规则和英文语法检查不需要 API 密钥。需要模型改写时，在“设置 → AI 改写”中配置自己的模型服务；查看结果后点击替换，才会修改正文。具体接入方式见下节。
+
+更新时保持安装路径不变。临时签名的应用重新构建或更新后，可能需要从辅助功能列表移除旧条目，再添加并授权当前应用。日常使用请启动安装好的 Release 应用；Debug 使用独立的 bundle ID。
 
 ## 模型接入与数据流
 

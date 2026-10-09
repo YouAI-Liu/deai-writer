@@ -38,6 +38,12 @@ The browser group is experimental and disabled by default. Enabling it does not 
 
 ## Build and install
 
+There is no GitHub Release, ready-made download or App Store listing yet. Build from source for now. Instructions for a complete trial app, if one is supplied later, are included below.
+
+DeAI requires macOS 14 or later. The Release build checked so far contains Apple Silicon and Intel binaries, uses ad-hoc signing and is not notarized by Apple. The full first-download, permission and usage flow has not been tested on another Mac, nor has first installation been verified separately on both architectures.
+
+### Build from source
+
 Build from source with Xcode, [Rust](https://rustup.rs) and [XcodeGen](https://github.com/yonaskolb/XcodeGen). Install XcodeGen with `brew install xcodegen` if you use Homebrew. Select the full Xcode installation as your active developer directory.
 
 ```sh
@@ -58,16 +64,32 @@ open ~/Applications/DeAI.app
 
 The Apple build script produces a universal library for Apple Silicon and Intel. Both trailing slashes in the `rsync` command matter: it updates the installed app's contents instead of nesting another app inside it.
 
-Release builds use ad-hoc signing unless you copy [Local.xcconfig.example](mac/Local.xcconfig.example) to `mac/Local.xcconfig` and set your own Apple Development team before building. This local file is ignored by Git. Keep the installed app at the same path; a stable signing identity helps macOS retain its Accessibility permission across updates.
+Release builds use ad-hoc signing unless you copy [Local.xcconfig.example](mac/Local.xcconfig.example) to `mac/Local.xcconfig` and set your own Apple Development team before building. This local file is ignored by Git. Apple Development is a development signature; it is not a [Developer ID signature](https://developer.apple.com/developer-id/) for distribution and does not mean the app is notarized.
+
+### If you receive a complete trial app
+
+If the project maintainer supplies a complete `DeAI.app` later, extract it, move it into Applications (`/Applications` or `~/Applications`) and open it from that fixed location. Recipients of the complete app do not need Xcode or Rust. Follow the instructions supplied with that particular build; there is currently no trial download link.
+
+### If macOS blocks the first launch
+
+Gatekeeper may block an unnotarized app on first launch. If the alert says the developer cannot be verified or Apple cannot check for malicious software, first confirm that the source is trustworthy and the app has not been tampered with. Then follow [Apple's instructions](https://support.apple.com/en-gb/102445):
+
+1. After attempting to open the app, go to **System Settings → Privacy & Security**.
+2. Find the alert for this app and click **Open Anyway**.
+3. Click **Open** in the confirmation dialog.
+
+If the alert reports malware, says the app will damage your computer or is damaged, or you find a signature problem, stop and contact the maintainer. Do not treat every warning as a notarization issue.
 
 ### First launch
 
-1. Open DeAI from `~/Applications`. Its controls appear in the menu bar.
-2. Grant access in **System Settings → Privacy & Security → Accessibility**. DeAI uses this permission to read text, position underlines and apply edits in other apps.
+1. Open DeAI from its installed location. Its controls appear in the menu bar.
+2. Add and enable that `DeAI.app` in **System Settings → Privacy & Security → Accessibility**. DeAI uses this permission to read text, position underlines and apply edits in other apps.
 3. Open a document in Word, TextEdit or Notes and start typing. Click an underline to see the suggested edit. You can also ignore a finding or disable its rule.
 4. For a longer passage, select it and press **Control + Option + R**. The shortcut is configurable in Settings.
 
-Local checks work without an API key. If macOS blocks an unnotarized build, use **Open Anyway** in Privacy & Security. After an ad-hoc rebuild, you may need to remove DeAI from the Accessibility list and grant access again. For everyday use, launch the installed Release app; Debug uses a separate bundle ID.
+Local rules and English grammar checks work without an API key. For model rewrites, configure your own service in **Settings → AI Rewrite**. Review the result and click Replace to change the document. Connection details are in the next section.
+
+Keep the installed app at the same path when updating. After an ad-hoc rebuild or update, you may need to remove the old Accessibility entry, add the current app and grant access again. For everyday use, launch the installed Release app; Debug uses a separate bundle ID.
 
 ## Models and data
 
