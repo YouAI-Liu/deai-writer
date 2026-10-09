@@ -12,6 +12,8 @@ mkdir -p "$OUTPUT"
 OUTPUT="$(cd "$OUTPUT" && pwd)"
 SHA="$(git -C "$ROOT" rev-parse "$REF^{commit}")"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/deai-release.XXXXXX")"
+# Rust resolves macOS /var symlinks before embedding generated-source paths.
+WORK="$(cd "$WORK" && pwd -P)"
 echo "Build workspace: $WORK"
 echo "Source revision: $SHA"
 mkdir -p "$WORK/source" "$WORK/stage"
