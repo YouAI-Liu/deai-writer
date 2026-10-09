@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Automation;
 using System.Windows.Input;
 using Microsoft.Win32;
@@ -17,7 +19,7 @@ internal sealed class SettingsWindow : Window
     private readonly Dictionary<string, Dictionary<string, CheckBox>> groupChecks = new();
     private readonly Dictionary<string, (TextBox Color, ComboBox Shape)> styles = new();
     private readonly StackPanel wordRows = new();
-    private readonly List<LexiconEditor> wordEditors = new();
+    private readonly ObservableCollection<LexiconEditor> wordEditors = new();
     private PersonalEntry[] wordSnapshot;
     private readonly ComboBox language = new(), zhSkill = new(), enSkill = new(), format = new();
     private readonly ListBox providers = new(), skillList = new() { DisplayMemberPath = "Name", Height = 110 };
@@ -123,8 +125,10 @@ internal sealed class SettingsWindow : Window
         skillList.SelectionChanged += (_, _) => skillBody.Text = (skillList.SelectedItem as Skill)?.Body ?? ""; ReloadSkills();
         var words = Ui.Section(personalPage, Ui.L("个人词库", "Personal lexicon")); words.Children.Add(wordRows); Add(words, wordStatus);
         var count = Ui.Label("", 10, "Muted");
-        Add(words, Ui.Row(Ui.Button(Ui.L("添加词条", "Add entry"), () => { if (wordEditors.Count < 200) { AddWord(new("replace", "", "")); count.Text = wordEditors.Count + "/200"; } }, "AddLexiconEntry"), count));
-        foreach (var entry in wordSnapshot) AddWord(entry); count.Text = wordEditors.Count + "/200";
+        count.SetBinding(TextBlock.TextProperty, new Binding(nameof(wordEditors.Count)) { Source = wordEditors, StringFormat = "{0}/200" });
+        AutomationProperties.SetAutomationId(count, "LexiconCount");
+        Add(words, Ui.Row(Ui.Button(Ui.L("添加词条", "Add entry"), () => { if (wordEditors.Count < 200) AddWord(new("replace", "", "")); }, "AddLexiconEntry"), count));
+        foreach (var entry in wordSnapshot) AddWord(entry);
         Add(words, Ui.Label(Ui.L("保留：不再建议；避免：提示少用；替换：记住你的说法。每条最多 100 个 UTF-16 字符。", "Keep suppresses suggestions; avoid discourages a term; replace remembers your wording. Up to 100 UTF-16 characters per field."), 11, "Muted"));
         tabs.SelectedIndex = Math.Clamp(initialTab, 0, 3); ready = true;
     }
