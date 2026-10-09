@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../DeAI.Core/DeAI.Core.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="../DeAI.App/Hotkeys.cs" Link="Hotkeys.cs" /><Compile Include="../DeAI.App/Ui.cs" Link="Ui.cs" /><Compile Include="../DeAI.App/PanelBehavior.cs" Link="PanelBehavior.cs" /></ItemGroup>
+  <ItemGroup><Page Include="../DeAI.App/Design.xaml" Link="Design.xaml" /></ItemGroup>
+</Project>

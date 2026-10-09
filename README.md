@@ -147,6 +147,10 @@ Finding offsets are UTF-16 code units. See [the rule reference](core/crates/deai
 
 Bug reports and pull requests are welcome through this repository's Issues and Pull requests tabs. For an app compatibility issue, include the macOS and app versions, reproduction steps and a short non-sensitive text sample. For a rule change, include examples that should match and examples that should stay unchanged.
 
+## Windows (experimental x64)
+
+The independent [Windows client](windows/README.md) uses WPF, UI Automation 3 and the existing Rust engine. Build/test/install instructions and **verified vs unverified** app compatibility are documented there. It does not replace the macOS client or its release artifacts. Windows installers are built locally, not automatically published.
+
 ## License and credits
 
 DeAI is licensed under [MIT](LICENSE). English grammar comes from [Harper](https://github.com/Automattic/harper); Chinese writing rules derive from [lieflat-less-ai-tone](https://github.com/larashero3-dotcom/lieflat-less-ai-tone), and English writing rules from [blader/humanizer](https://github.com/blader/humanizer). Attribution, license texts and the dependency inventory are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

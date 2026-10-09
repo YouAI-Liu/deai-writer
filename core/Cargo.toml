@@ -4,6 +4,7 @@ members = [
     "crates/deai-core",
     "crates/deai-ffi",
     "crates/deai-wasm",
+    "crates/deai-native",
 ]
 
 [workspace.dependencies]
