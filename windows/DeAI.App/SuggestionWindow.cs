@@ -52,7 +52,7 @@ internal sealed class SuggestionWindow : Window
             Ui.Color(dot, System.Windows.Shapes.Shape.FillProperty, Ui.CategoryKey(selected.Category)); heading.Children.Add(dot);
             var tag = Ui.Label(Ui.Category(selected.Category), 10, "Muted");
             tag.Padding = new Thickness(7, 3, 7, 3);
-            var capsule = new Border { CornerRadius = new CornerRadius(20), Child = tag };
+            var capsule = new Border { Child = tag }; Ui.Pill(capsule);
             Ui.Color(capsule, Border.BackgroundProperty, "Track"); heading.Children.Add(capsule);
         }
         else heading.Children.Add(Ui.Label("DeAI", 12, "Muted"));

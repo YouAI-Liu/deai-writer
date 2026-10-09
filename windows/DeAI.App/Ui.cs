@@ -6,6 +6,8 @@ using System.Windows.Automation;
 using System.Collections.Generic;
 using System.Windows.Input;
 using System.Windows.Media.Effects;
+using System.Windows.Data;
+using System.Globalization;
 using Microsoft.Win32;
 
 namespace DeAI.App;
@@ -103,7 +105,8 @@ internal static class Ui
             Margin = new Thickness(20),
             CornerRadius = new CornerRadius(12),
             BorderThickness = new Thickness(0.5),
-            Child = content,
+            Child = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
+            MaxHeight = Math.Max(0, SystemParameters.WorkArea.Height - 40),
             Effect = new DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.16 }
         };
         Color(border, Border.BackgroundProperty, "Background"); Color(border, Border.BorderBrushProperty, "Border");
@@ -111,6 +114,24 @@ internal static class Ui
         window.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { window.Close(); e.Handled = true; } };
         return content;
     }
+    public static void PinPanel(Window window, StackPanel content, FrameworkElement header, FrameworkElement footer)
+    {
+        var border = (Border)window.Content;
+        ((ScrollViewer)border.Child).Content = null;
+        var layout = new DockPanel { Margin = content.Margin };
+        content.Margin = new Thickness(0);
+        DockPanel.SetDock(header, Dock.Top); layout.Children.Add(header);
+        DockPanel.SetDock(footer, Dock.Bottom); layout.Children.Add(footer);
+        layout.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        border.Child = layout;
+    }
+    public static WrapPanel Actions(params FrameworkElement[] controls)
+    {
+        var panel = new WrapPanel();
+        foreach (var control in controls) { control.Margin = new Thickness(0, 0, 8, 8); panel.Children.Add(control); }
+        return panel;
+    }
+    public static void Pill(Border border) => border.SetBinding(Border.CornerRadiusProperty, new Binding(nameof(Border.ActualHeight)) { Source = border, Converter = new PillRadiusConverter() });
     public static Border Separator()
     {
         var line = new Border { Height = 0.5 }; Color(line, Border.BackgroundProperty, "Border"); return line;
@@ -162,4 +183,10 @@ internal static class Ui
         if (id != null) AutomationProperties.SetAutomationId(text, id); return text;
     }
     public static void Error(Exception error) => MessageBox.Show(error is InvalidOperationException ? error.Message : L("操作失败；原文未主动覆盖。请重试或检查配置/目标权限。", "Operation failed. Check configuration/target permissions and retry."), "DeAI", MessageBoxButton.OK, MessageBoxImage.Warning);
+}
+
+public sealed class PillRadiusConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => new CornerRadius(value is double height ? Math.Max(0, height / 2) : 0);
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

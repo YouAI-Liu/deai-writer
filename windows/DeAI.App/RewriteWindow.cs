@@ -35,19 +35,19 @@ internal sealed class RewriteWindow : Window
         var close = Ui.Icon("×", Ui.L("关闭", "Close"), Close, "CloseRewrite");
         var header = Ui.Row(Ui.Title(Ui.L("AI 改写", "AI rewrite"), 18), close);
         header.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 1 && e.OriginalSource is TextBlock) DragMove(); };
-        body.Children.Add(header);
         var sourceLabel = Ui.Label(Ui.L("原文", "Original"), 11, "Muted"); sourceLabel.Margin = new Thickness(0, 18, 0, 8); body.Children.Add(sourceLabel);
         var original = Ui.Text(source, "RewriteOriginal", true);
-        original.IsReadOnly = true; original.Height = 110; original.FontSize = 13; body.Children.Add(original);
+        original.IsReadOnly = true; original.MinHeight = 20; original.MaxHeight = 160; original.FontSize = 13; original.Padding = new Thickness(0); original.BorderThickness = new Thickness(0);
+        Ui.Color(original, Control.BackgroundProperty, "Background"); Ui.Color(original, Control.ForegroundProperty, "SecondaryText"); body.Children.Add(original);
         var divider = Ui.Separator(); divider.Margin = new Thickness(0, 16, 0, 16); body.Children.Add(divider);
-        output = Ui.Text("", "RewriteOutput", true); output.IsReadOnly = true; output.Height = 160;
+        output = Ui.Text("", "RewriteOutput", true); output.IsReadOnly = true; output.MinHeight = 20; output.MaxHeight = 160; output.Margin = new Thickness(0, 6, 0, 0);
         Ui.Color(output, Control.BackgroundProperty, "Background"); output.BorderThickness = new Thickness(0); output.Padding = new Thickness(0);
         state.Children.Add(Ui.Label(Ui.L("改写", "Rewrite"), 11, "Muted")); state.Children.Add(progress); state.Children.Add(output); body.Children.Add(state);
         status = Ui.Label("", 11, "Muted"); status.Margin = new Thickness(0, 8, 0, 12);
         AutomationProperties.SetAutomationId(status, "RewriteStatus"); body.Children.Add(status);
         body.Children.Add(remember);
-        var separator = Ui.Separator(); separator.Margin = new Thickness(0, 12, 0, 16); body.Children.Add(separator);
-        var actions = new WrapPanel();
+        var footer = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var separator = Ui.Separator(); separator.Margin = new Thickness(0, 0, 0, 16); footer.Children.Add(separator);
         send = Ui.Button(Ui.L("发送并改写", "Send and rewrite"), async () => await Request(), "SendRewrite", "PrimaryButton");
         apply = Ui.Button(Ui.L("替换", "Replace"), async () =>
         {
@@ -58,10 +58,8 @@ internal sealed class RewriteWindow : Window
         }, "AcceptRewrite", "PrimaryButton");
         copy = Ui.Button(Ui.L("复制", "Copy"), () => { if (output.Text.Length > 0) Clipboard.SetText(output.Text); }, "CopyRewrite");
         retry = Ui.Button(Ui.L("重试", "Retry"), async () => await Request(), "RetryRewrite");
-        actions.Children.Add(send); actions.Children.Add(apply); actions.Children.Add(copy); actions.Children.Add(retry);
-        actions.Children.Add(Ui.Button(Ui.L("取消", "Cancel"), Close, "CancelRewrite", "FlatButton"));
-        foreach (FrameworkElement child in actions.Children) child.Margin = new Thickness(0, 0, 8, 0);
-        body.Children.Add(actions);
+        footer.Children.Add(Ui.Actions(send, apply, copy, retry, Ui.Button(Ui.L("取消", "Cancel"), Close, "CancelRewrite", "FlatButton")));
+        Ui.PinPanel(this, body, header, footer);
         output.Visibility = Visibility.Collapsed; state.Visibility = Visibility.Collapsed;
         status.Text = RewriteClient.Endpoint(preferences.Provider).Host + " · " + preferences.Provider.Model + "\n" +
             Ui.L("仅发送上面的原文、所选 Skill 和个人词库。结果需确认后才写回。", "Only the source above, selected Skill and lexicon are sent. Confirm the result before applying.");
@@ -137,8 +135,11 @@ internal sealed class RewriteWindow : Window
             }
             catch (Exception error) { Ui.Error(error); }
         }, "RememberRewrite");
+        add.HorizontalAlignment = HorizontalAlignment.Right; add.Margin = new Thickness(0, 8, 0, 0);
         list.Children.Add(add);
-        var expander = new Expander { Header = Ui.L("记住改法", "Remember changes"), Content = list, IsExpanded = true };
+        var container = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = list };
+        Ui.Color(container, Border.BackgroundProperty, "Sidebar");
+        var expander = new Expander { Header = Ui.L($"记住改法（{pairs.Length}）", $"Remember changes ({pairs.Length})"), Content = container };
         AutomationProperties.SetAutomationId(expander, "RememberChanges"); remember.Children.Add(expander);
     }
 }

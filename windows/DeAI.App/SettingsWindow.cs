@@ -93,18 +93,14 @@ internal sealed class SettingsWindow : Window
         var service = Ui.Section(aiPage, Ui.L("服务配置", "Providers"));
         providers.DisplayMemberPath = "Name"; providers.Height = 100; providers.BorderThickness = new Thickness(0);
         AutomationProperties.SetAutomationId(providers, "Providers"); service.Children.Add(providers);
-        var toolbar = new WrapPanel(); toolbar.Children.Add(Ui.Button(Ui.L("添加服务", "Add provider"), AddProvider, "AddProvider"));
-        toolbar.Children.Add(Ui.Button(Ui.L("删除", "Remove"), RemoveProvider, "RemoveProvider", "FlatButton")); Add(service, toolbar);
+        Add(service, Ui.Actions(Ui.Button(Ui.L("添加服务", "Add provider"), AddProvider, "AddProvider"), Ui.Button(Ui.L("删除", "Remove"), RemoveProvider, "RemoveProvider", "FlatButton")));
         providers.SelectionChanged += (_, _) => SelectProvider();
         var detail = new StackPanel();
         Add(detail, Field(Ui.L("名称", "Name"), providerName)); Add(detail, Field("Base URL", url)); Add(detail, Field(Ui.L("模型", "Model"), model));
         format.ItemsSource = new[] { "chat", "responses", "anthropic" }; format.Width = 140; Add(detail, Ui.Row(Ui.Label("API format", 12), format));
         freeOnly.Content = Ui.L("OpenRouter 仅免费模型", "OpenRouter: free models only"); Add(detail, freeOnly);
         AutomationProperties.SetAutomationId(key, "ProviderKey"); Add(detail, Field("API Key", key)); Add(detail, keyStatus);
-        var keyActions = new WrapPanel();
-        keyActions.Children.Add(Ui.Button(Ui.L("保存配置与密钥", "Save configuration & key"), SaveProvider, "SaveProvider", "PrimaryButton"));
-        keyActions.Children.Add(Ui.Button(Ui.L("删除密钥", "Delete key"), () => { try { controller.Secrets.Delete(); KeyStatus(); } catch (Exception error) { Ui.Error(error); } }, "DeleteProviderKey", "FlatButton"));
-        Add(detail, keyActions); Add(detail, providerStatus);
+        Add(detail, Ui.Actions(Ui.Button(Ui.L("保存配置与密钥", "Save configuration & key"), SaveProvider, "SaveProvider", "PrimaryButton"), Ui.Button(Ui.L("删除密钥", "Delete key"), () => { try { controller.Secrets.Delete(); KeyStatus(); } catch (Exception error) { Ui.Error(error); } }, "DeleteProviderKey", "FlatButton"))); Add(detail, providerStatus);
         Add(detail, Ui.Label(Ui.L("密钥留空保留原值。DPAPI 按 Windows 用户及服务分别加密；不会显示已存密钥。", "Blank keeps the saved key. DPAPI encrypts keys per Windows user and provider. Saved values are never displayed."), 10, "Muted"));
         service.Children.Add(new Expander { Header = Ui.L("服务详情", "Provider details"), IsExpanded = true, Content = detail });
         ReloadProviders();
@@ -116,11 +112,10 @@ internal sealed class SettingsWindow : Window
         zhSkill.SelectionChanged += (_, _) => Save(); enSkill.SelectionChanged += (_, _) => Save();
         skillBody.IsReadOnly = true; skillBody.Height = 130;
         var management = new StackPanel(); management.Children.Add(skillList); management.Children.Add(skillBody);
-        var skillActions = new WrapPanel();
-        skillActions.Children.Add(Ui.Button(Ui.L("导入文件", "Import file"), () => ImportSkill(false), "ImportSkill"));
-        skillActions.Children.Add(Ui.Button(Ui.L("导入文件夹", "Import folder"), () => ImportSkill(true), "ImportSkillFolder"));
-        skillActions.Children.Add(Ui.Button(Ui.L("新建 / 编辑", "New / edit"), EditSkill, "EditSkill"));
-        skillActions.Children.Add(Ui.Button(Ui.L("删除", "Delete"), () => { if (skillList.SelectedItem is Skill skill && skill.Id != Skill.BuiltinId) { controller.Skills.Delete(skill); ReloadSkills(); Save(); } }, "DeleteSkill", "FlatButton"));
+        var skillActions = Ui.Actions(Ui.Button(Ui.L("导入文件", "Import file"), () => ImportSkill(false), "ImportSkill"),
+            Ui.Button(Ui.L("导入文件夹", "Import folder"), () => ImportSkill(true), "ImportSkillFolder"),
+            Ui.Button(Ui.L("新建 / 编辑", "New / edit"), EditSkill, "EditSkill"),
+            Ui.Button(Ui.L("删除", "Delete"), () => { if (skillList.SelectedItem is Skill skill && skill.Id != Skill.BuiltinId) { controller.Skills.Delete(skill); ReloadSkills(); Save(); } }, "DeleteSkill", "FlatButton"));
         management.Children.Add(skillActions); skills.Children.Add(new Expander { Header = Ui.L("管理 Skills", "Manage Skills"), Content = management });
         skillList.SelectionChanged += (_, _) => skillBody.Text = (skillList.SelectedItem as Skill)?.Body ?? ""; ReloadSkills();
         var words = Ui.Section(personalPage, Ui.L("个人词库", "Personal lexicon")); words.Children.Add(wordRows); Add(words, wordStatus);
@@ -166,7 +161,7 @@ internal sealed class SettingsWindow : Window
             var radio = new RadioButton { Content = names[i], GroupName = group, IsChecked = i == selected, Style = (Style)Application.Current.FindResource("Segment") };
             radio.Checked += (_, _) => changed(index); Grid.SetColumn(radio, i); grid.Children.Add(radio);
         }
-        var border = new Border { CornerRadius = new CornerRadius(100), Padding = new Thickness(5), Child = grid }; Ui.Color(border, Border.BackgroundProperty, "Track"); return border;
+        var border = new Border { Padding = new Thickness(5), Child = grid }; Ui.Pill(border); Ui.Color(border, Border.BackgroundProperty, "Track"); return border;
     }
     private static CheckOptions ReadOptions(Dictionary<string, CheckBox> flags, byte sensitivity) => new(
         flags["grammar"].IsChecked == true, flags["ai_tone_en"].IsChecked == true, flags["ai_tone_zh"].IsChecked == true, flags["markdown"].IsChecked == true, flags["personal"].IsChecked == true, sensitivity);
@@ -354,8 +349,8 @@ internal sealed record UiChoice(string Value, string Label)
 }
 internal sealed class LexiconEditor : StackPanel
 {
-    private readonly ComboBox kind = new() { ItemsSource = new[] { new UiChoice("replace", Ui.L("替换", "Replace")), new UiChoice("avoid", Ui.L("避免", "Avoid")), new UiChoice("keep", Ui.L("保留", "Keep")) }, DisplayMemberPath = "Label", SelectedValuePath = "Value", Width = 76 };
-    private readonly ComboBox match = new() { ItemsSource = new[] { new UiChoice("exact", Ui.L("精确匹配", "Exact")), new UiChoice("caseInsensitive", Ui.L("忽略大小写", "Case-insensitive")), new UiChoice("wholeWord", Ui.L("整词匹配", "Whole word")) }, DisplayMemberPath = "Label", SelectedValuePath = "Value", Width = 140 };
+    private readonly ComboBox kind = new() { ItemsSource = new[] { new UiChoice("replace", Ui.L("替换", "Replace")), new UiChoice("avoid", Ui.L("避免", "Avoid")), new UiChoice("keep", Ui.L("保留", "Keep")) }, DisplayMemberPath = "Label", SelectedValuePath = "Value", Width = 106 };
+    private readonly ComboBox match = new() { ItemsSource = new[] { new UiChoice("exact", Ui.L("精确匹配", "Exact")), new UiChoice("caseInsensitive", Ui.L("忽略大小写", "Case-insensitive")), new UiChoice("wholeWord", Ui.L("整词匹配", "Whole word")) }, DisplayMemberPath = "Label", SelectedValuePath = "Value", Width = 172 };
     private readonly TextBox term, replacement;
     public Action Delete { get; set; }
     public PersonalEntry Value => new((string)kind.SelectedValue, term.Text, kind.SelectedValue as string == "replace" ? replacement.Text : null, (string)match.SelectedValue);
@@ -365,7 +360,7 @@ internal sealed class LexiconEditor : StackPanel
         term = Ui.Text(entry.Term); replacement = Ui.Text(entry.Replacement ?? ""); term.Padding = replacement.Padding = new Thickness(8, 5, 8, 5);
         var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.Children.Add(kind); term.Margin = replacement.Margin = new Thickness(8, 0, 0, 0); Grid.SetColumn(term, 1); row.Children.Add(term); Grid.SetColumn(replacement, 2); row.Children.Add(replacement);
-        var remove = Ui.Icon("×", Ui.L("删除词条", "Delete entry"), () => Delete()); Grid.SetColumn(remove, 3); row.Children.Add(remove); Children.Add(row);
+        var remove = Ui.Icon("×", Ui.L("删除词条", "Delete entry"), () => Delete()); remove.Margin = new Thickness(8, 0, 0, 0); Grid.SetColumn(remove, 3); row.Children.Add(remove); Children.Add(row);
         replacement.Visibility = entry.Kind == "replace" ? Visibility.Visible : Visibility.Collapsed;
         var advanced = new Expander { Header = Ui.L("匹配方式", "Match mode"), Content = match, FontSize = 10, Margin = new Thickness(0, 4, 0, 0) }; Children.Add(advanced);
         kind.SelectionChanged += (_, _) => { replacement.Visibility = kind.SelectedValue as string == "replace" ? Visibility.Visible : Visibility.Collapsed; changed(); };

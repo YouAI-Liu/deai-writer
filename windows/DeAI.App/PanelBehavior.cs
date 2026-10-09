@@ -20,16 +20,31 @@ internal sealed class PanelBehavior : IDisposable
         this.window = window; this.dismiss = dismiss; this.popupOpen = popupOpen ?? (() => false);
         mouse = Mouse; keyboard = Keyboard;
         window.IsVisibleChanged += VisibilityChanged;
+        window.SizeChanged += Resized;
         window.Closed += (_, _) => Dispose();
     }
     private void VisibilityChanged(object sender, DependencyPropertyChangedEventArgs args)
     {
         if (window.IsVisible)
         {
+            Fit();
             mouseHandle = SetWindowsHookEx(14, mouse, GetModuleHandle(null), 0);
             keyboardHandle = SetWindowsHookEx(13, keyboard, GetModuleHandle(null), 0);
         }
         else Unhook();
+    }
+    private void Resized(object sender, SizeChangedEventArgs args) { if (window.IsVisible) Fit(); }
+    private void Fit()
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero || !GetWindowRect(handle, out var rect)) return;
+        var area = System.Windows.Forms.Screen.FromHandle(handle).WorkingArea;
+        var scale = GetDpiForWindow(handle) / 96.0;
+        window.MaxHeight = area.Height / scale;
+        if (window.Content is System.Windows.Controls.Border border) border.MaxHeight = Math.Max(0, window.MaxHeight - 40);
+        var x = Math.Clamp(rect.Left, area.Left, Math.Max(area.Left, area.Right - (rect.Right - rect.Left)));
+        var y = Math.Clamp(rect.Top, area.Top, Math.Max(area.Top, area.Bottom - (rect.Bottom - rect.Top)));
+        if (x != rect.Left || y != rect.Top) SetWindowPos(handle, IntPtr.Zero, x, y, 0, 0, 0x15);
     }
     private IntPtr Mouse(int code, IntPtr message, IntPtr data)
     {
@@ -92,7 +107,7 @@ internal sealed class PanelBehavior : IDisposable
         if (keyboardHandle != IntPtr.Zero) UnhookWindowsHookEx(keyboardHandle);
         mouseHandle = keyboardHandle = IntPtr.Zero;
     }
-    public void Dispose() { Unhook(); window.IsVisibleChanged -= VisibilityChanged; }
+    public void Dispose() { Unhook(); window.IsVisibleChanged -= VisibilityChanged; window.SizeChanged -= Resized; }
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookEx(int kind, Hook callback, IntPtr module, uint thread);
