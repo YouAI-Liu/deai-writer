@@ -140,6 +140,12 @@ internal static class Ui
         Refresh(null, null);
     }
     public static void SelectedTooltip(ComboBox combo, string member) => combo.SetBinding(FrameworkElement.ToolTipProperty, new Binding("SelectedItem." + member) { Source = combo });
+    public static ContextMenu Menu()
+    {
+        var menu = new ContextMenu();
+        menu.Resources.MergedDictionaries.Add(Application.Current.Resources);
+        return menu;
+    }
     public static Border Separator()
     {
         var line = new Border { Height = 0.5 }; Color(line, Border.BackgroundProperty, "Border"); return line;

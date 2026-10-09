@@ -29,6 +29,7 @@ internal static class LayoutTests
                     var theme = dark ? "dark" : "light";
                     if (nativeWindow)
                     {
+                        Check(theme + " existing popup follows live and closed theme changes", () => NativeMenu(dark));
                         Check(theme + " native editor proportions and dropdown arrow", NativeEditors);
                         Check(theme + " native panel growth and movement refit the working area", NativeBounds);
                     }
@@ -216,6 +217,28 @@ internal static class LayoutTests
             Equal(((SolidColorBrush)Ui.Brush("SecondaryText")).Color, ((SolidColorBrush)arrow.Foreground).Color);
         }
         finally { window.Close(); Drain(); }
+    }
+    private static void NativeMenu(bool dark)
+    {
+        var menu = Ui.Menu();
+        var item = new MenuItem { Header = "Synthetic menu item" };
+        menu.Items.Add(item);
+        var button = Ui.Button("More", () => { }); button.ContextMenu = menu;
+        var window = new Window { Content = button, Width = 200, Height = 120 };
+        Ui.Style(window);
+        try
+        {
+            window.Show(); Drain(); menu.IsOpen = true; Drain();
+            void AssertPalette()
+            {
+                Equal(((SolidColorBrush)Ui.Brush("Surface")).Color, ((SolidColorBrush)Find<Border>(menu).Background).Color);
+                Equal(((SolidColorBrush)Ui.Brush("Text")).Color, ((SolidColorBrush)item.Foreground).Color);
+            }
+            AssertPalette(); Ui.RefreshTheme(!dark); Drain(); AssertPalette();
+            menu.IsOpen = false; Drain(); Ui.RefreshTheme(dark);
+            menu.IsOpen = true; Drain(); AssertPalette();
+        }
+        finally { menu.IsOpen = false; window.Close(); Ui.RefreshTheme(dark); Drain(); }
     }
     private static void Drain()
     {
