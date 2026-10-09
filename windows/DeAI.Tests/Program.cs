@@ -58,6 +58,20 @@ public static class Program
             Check("UIA stale write blocked", () => Reject(() => target.Replace(3, 7, "danger")));
             Check("UIA password not read", () => Equal<TextTarget?>(null, TextTarget.Capture(Find("Password"), automation)));
             Check("UIA rich text write blocked", () => { var rich = TextTarget.Capture(Find("RichText"), automation)!; Equal(false, rich.CanWrite); Reject(() => rich.Replace(0, 0, "danger")); });
+            Check("UIA rewrite keeps selected paragraph terminator and next paragraph", () =>
+            {
+                const string first = "It is worth noting that our synthetic project has three steps.";
+                const string second = "DO NOT CHANGE THIS SECOND PARAGRAPH.";
+                ((IUIAutomationValuePattern)plain.GetCurrentPattern(10002)).SetValue(first + "\r\n" + second);
+                var before = TextTarget.Capture(plain, automation)!;
+                before.Select(0, first.Length + 2);
+                var selected = TextTarget.Capture(plain, automation)!;
+                Equal(new TextSpan(0, first.Length + 2), selected.Selection);
+                var scope = RewriteScope.Compute(selected.Original, selected.Selection);
+                Equal(new TextSpan(0, first.Length), scope);
+                selected.Replace(scope.Start, scope.End, RewriteScope.ValidateResult("Our synthetic project has three steps.", selected.Original[scope.Start..scope.End]));
+                Equal("Our synthetic project has three steps.\r\n" + second, TextTarget.Capture(plain, automation)!.Original);
+            });
         }
         catch (Exception e) { failed++; Console.WriteLine("FAIL fixture: " + e); }
         finally { if (!fixture.HasExited) fixture.Kill(); }

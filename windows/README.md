@@ -36,6 +36,8 @@ windows/DeAI.Tests/bin/x64/Release/net8.0-windows/DeAI.Tests.exe windows/DeAI.Fi
 
 AI 支持 OpenAI Chat Completions、Responses、Anthropic Messages 和兼容的自定义 HTTPS 服务（loopback 调试可用 HTTP），拒绝重定向。OpenRouter 预设默认选择 `openrouter/free` 并开启「仅免费模型」，请求强制 `provider.max_price.prompt=0`、`completion=0`，拒绝付费模型；免费模型的限流、可用性、第三方数据保留策略以 OpenRouter 为准。自动化测试使用合成文本与模拟 HTTP，不依赖密钥、不自动调用真实服务。
 
+改写范围排除选区首尾的 CR/LF 或 Unicode 段落分隔符，保留与未选中段落之间的边界。结果按原文换行风格归一化；如果 AI 合并或新增段落，拒绝该结果，不允许写回。
+
 密钥单独存放在 `%LOCALAPPDATA%\DeAI\provider-key.dpapi`，用 DPAPI **CurrentUser** 加密；不会进入 settings.json/源码/日志。DPAPI 不防同用户恶意进程，不是通用跨平台同步密钥方案。替换服务地址但保留已有密钥时需要确认。
 
 ## 安全边界与兼容范围

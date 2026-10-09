@@ -26,6 +26,9 @@ public static class RewriteScope
             while (start > 0 && !Separator(text[start - 1])) start--;
             while (end < text.Length && !Separator(text[end])) end++;
         }
+        // A provider may include the paragraph terminator in its selection; it is not AI-editable content.
+        while (start < end && Separator(text[start])) start++;
+        while (end > start && Separator(text[end - 1])) end--;
         if (end - start > 4000) throw new InvalidOperationException("改写范围上限 4000 UTF-16 字符。");
         if (string.IsNullOrWhiteSpace(text[start..end])) throw new InvalidOperationException("改写范围为空。");
         return new(start, end);
@@ -36,6 +39,13 @@ public static class RewriteScope
         var newline = original.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : original.Contains('\r') ? "\r"
             : original.Contains('\u2029') ? "\u2029" : original.Contains('\u2028') ? "\u2028" : "\n";
         return output.Replace("\r\n", "\n").Replace('\r', '\n').Replace('\u2029', '\n').Replace('\u2028', '\n').Replace("\n", newline);
+    }
+    public static string ValidateResult(string output, string original)
+    {
+        var result = NormalizeNewlines(output.Trim('\r', '\n', '\u2028', '\u2029'), original);
+        static int Breaks(string value) => NormalizeNewlines(value, "\n").Count(Separator);
+        if (string.IsNullOrWhiteSpace(result) || Breaks(result) != Breaks(original)) throw new InvalidOperationException("AI 改变了段落边界或返回空文本；请重新改写，未写回。");
+        return result;
     }
 }
 
@@ -107,7 +117,7 @@ public sealed class RewriteClient : IDisposable
         }
         var output = ParseResponse(provider.Format, Encoding.UTF8.GetString(buffer.ToArray()));
         if (string.IsNullOrWhiteSpace(output) || output.Length > 8000) throw new InvalidOperationException("AI 返回空文本或超长文本；未写回。");
-        return RewriteScope.NormalizeNewlines(output, source);
+        return RewriteScope.ValidateResult(output, source);
     }
     public static string ParseResponse(string format, string json)
     {

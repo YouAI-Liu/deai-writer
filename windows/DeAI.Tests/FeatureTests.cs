@@ -55,6 +55,10 @@ internal static class FeatureTests
         Check("Text size cap", () => Reject(() => TextSafety.Replace(new string('a', 100001), new string('a', 100001), 0, 1, "")));
         Check("Rewrite selection scope", () => Equal(new TextSpan(3, 6), RewriteScope.Compute("😀 bad\r\nnext", new(3, 6))));
         Check("Rewrite caret paragraph scope", () => Equal(new TextSpan(8, 12), RewriteScope.Compute("😀 bad\r\nnext", new(10, 10))));
+        Check("Rewrite selected CRLF stays outside replacement", () => { var text = "first\r\nsecond"; var scope = RewriteScope.Compute(text, new(0, 7)); Equal(new TextSpan(0, 5), scope); Equal("revised\r\nsecond", TextSafety.Replace(text, text, scope.Start, scope.End, "revised")); });
+        Check("Rewrite outer CR LF and Unicode boundaries preserved", () => { foreach (var separator in new[] { "\r\n", "\n", "\r", "\u2028", "\u2029" }) { var text = separator + "content" + separator + "outside"; var scope = RewriteScope.Compute(text, new(0, separator.Length + 7 + separator.Length)); Equal(new TextSpan(separator.Length, separator.Length + 7), scope); Equal(separator + "revised" + separator + "outside", TextSafety.Replace(text, text, scope.Start, scope.End, "revised")); } });
+        Check("Rewrite paragraph-only selection refused", () => Reject(() => RewriteScope.Compute("first\r\nsecond", new(5, 7))));
+        Check("AI paragraph merge or split refused", () => { Reject(() => RewriteScope.ValidateResult("merged", "one\r\ntwo")); Reject(() => RewriteScope.ValidateResult("one\ntwo", "original")); Equal("one\r\ntwo", RewriteScope.ValidateResult("\none\ntwo\n", "first\r\nsecond")); });
         Check("Rewrite missing selection refused", () => Reject(() => RewriteScope.Compute("text", null)));
         Check("Rewrite too long refused", () => Reject(() => RewriteScope.Compute(new string('a', 4001), new(0, 4001))));
         Check("Rewrite surrogate boundary refused", () => Reject(() => RewriteScope.Compute("😀 text", new(1, 2))));
