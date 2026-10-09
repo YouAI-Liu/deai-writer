@@ -40,7 +40,10 @@ internal sealed class SettingsWindow : Window
         wordSnapshot = controller.Lexicon.ToArray(); sensitivity = preferences.Options.Sensitivity;
         Title = "DeAI — " + Ui.L("设置", "Settings"); Ui.Style(this);
         ResizeMode = ResizeMode.CanMinimize; SizeToContent = SizeToContent.WidthAndHeight;
-        var root = new Grid { Width = Ui.SettingsWidth, Height = Ui.SettingsHeight }; root.Children.Add(tabs); Content = root;
+        MaxHeight = SystemParameters.WorkArea.Height;
+        Ui.SelectedTooltip(zhSkill, "Name"); Ui.SelectedTooltip(enSkill, "Name");
+        var frame = SystemParameters.WindowNonClientFrameThickness;
+        var root = new Grid { Width = Ui.SettingsWidth, Height = Math.Max(0, Math.Min(Ui.SettingsHeight, MaxHeight - frame.Top - frame.Bottom)) }; root.Children.Add(tabs); Content = root;
         var checkPage = Page(Ui.L("检查", "Check"), "☷", "CheckSettings");
         var appearancePage = Page(Ui.L("下划线外观", "Underlines"), "U̲", "UnderlineSettings");
         var aiPage = Page(Ui.L("AI 改写", "AI rewrite"), "✧", "AISettings");

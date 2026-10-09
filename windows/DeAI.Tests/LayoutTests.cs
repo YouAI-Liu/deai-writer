@@ -25,6 +25,27 @@ internal static class LayoutTests
                 {
                     Ui.RefreshTheme(dark);
                     var theme = dark ? "dark" : "light";
+                    Check(theme + " learn action requires a selection and stays disabled after saving", () =>
+                    {
+                        var choices = new[] { new CheckBox(), new CheckBox() };
+                        var action = Ui.Button("Add to lexicon", () => { });
+                        var saved = false;
+                        Ui.EnableForSelection(action, choices, () => !saved);
+                        Equal(false, action.IsEnabled);
+                        choices[0].IsChecked = true; Equal(true, action.IsEnabled);
+                        choices[1].IsChecked = true; choices[0].IsChecked = false; Equal(true, action.IsEnabled);
+                        choices[1].IsChecked = false; Equal(false, action.IsEnabled);
+                        choices[0].IsChecked = true; saved = true; action.IsEnabled = false;
+                        choices[0].IsChecked = false; choices[0].IsChecked = true; Equal(false, action.IsEnabled);
+                    });
+                    Check(theme + " long selected names have a complete tooltip", () =>
+                    {
+                        var name = new string('x', 100);
+                        var combo = new ComboBox { ItemsSource = new[] { new { Name = name } }, DisplayMemberPath = "Name", SelectedIndex = 0 };
+                        Ui.SelectedTooltip(combo, "Name");
+                        Layout(combo, 166);
+                        Equal(name, combo.ToolTip as string);
+                    });
                     Check(theme + " pills have circular caps and natural button width", () =>
                     {
                         var button = Ui.Button("Add entry", () => { });
@@ -75,7 +96,7 @@ internal static class LayoutTests
                                 var label = Ui.Label(name, 11); label.Margin = new Thickness(0, 3, 0, 0); header.Children.Add(label);
                                 tabs.Items.Add(new TabItem { Header = header, Content = new Border() });
                             }
-                            Layout(tabs, 560, 660);
+                            Layout(tabs, 560, 400);
                             var top = Find<TabPanel>(tabs);
                             foreach (TabItem tab in tabs.Items)
                             {

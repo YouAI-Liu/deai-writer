@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media.Effects;
 using System.Windows.Data;
 using System.Globalization;
+using System.Linq;
 using Microsoft.Win32;
 
 namespace DeAI.App;
@@ -132,6 +133,13 @@ internal static class Ui
         return panel;
     }
     public static void Pill(Border border) => border.SetBinding(Border.CornerRadiusProperty, new Binding(nameof(Border.ActualHeight)) { Source = border, Converter = new PillRadiusConverter() });
+    public static void EnableForSelection(Button button, IReadOnlyList<CheckBox> choices, Func<bool>? allowed = null)
+    {
+        void Refresh(object? sender, RoutedEventArgs? args) => button.IsEnabled = (allowed?.Invoke() ?? true) && choices.Any(choice => choice.IsChecked == true);
+        foreach (var choice in choices) { choice.Checked += Refresh; choice.Unchecked += Refresh; choice.Indeterminate += Refresh; }
+        Refresh(null, null);
+    }
+    public static void SelectedTooltip(ComboBox combo, string member) => combo.SetBinding(FrameworkElement.ToolTipProperty, new Binding("SelectedItem." + member) { Source = combo });
     public static Border Separator()
     {
         var line = new Border { Height = 0.5 }; Color(line, Border.BackgroundProperty, "Border"); return line;

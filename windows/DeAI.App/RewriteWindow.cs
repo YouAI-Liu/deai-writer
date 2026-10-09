@@ -136,6 +136,7 @@ internal sealed class RewriteWindow : Window
             catch (Exception error) { Ui.Error(error); }
         }, "RememberRewrite");
         add.HorizontalAlignment = HorizontalAlignment.Right; add.Margin = new Thickness(0, 8, 0, 0);
+        Ui.EnableForSelection(add, options.Select(option => option.Check).ToArray(), () => !saved);
         list.Children.Add(add);
         var container = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = list };
         Ui.Color(container, Border.BackgroundProperty, "Sidebar");
