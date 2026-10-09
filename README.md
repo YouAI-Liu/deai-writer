@@ -38,9 +38,9 @@ The browser group is experimental and disabled by default. Enabling it does not 
 
 ## Build and install
 
-There is no GitHub Release, ready-made download or App Store listing yet. Build from source for now. Instructions for a complete trial app, if one is supplied later, are included below.
+Download the first preview: [DeAI 0.1.0 Preview 1](https://github.com/YouAI-Liu/deai-writer/releases/tag/v0.1.0-preview.1) · [Universal macOS ZIP](https://github.com/YouAI-Liu/deai-writer/releases/download/v0.1.0-preview.1/DeAI-0.1.0-preview.1-macOS-universal.zip) · [SHA-256 checksums](https://github.com/YouAI-Liu/deai-writer/releases/download/v0.1.0-preview.1/SHA256SUMS.txt). DeAI is not on the App Store. You can also build from source below.
 
-DeAI requires macOS 14 or later. The Release build checked so far contains Apple Silicon and Intel binaries, uses ad-hoc signing and is not notarized by Apple. The full first-download, permission and usage flow has not been tested on another Mac, nor has first installation been verified separately on both architectures.
+DeAI requires macOS 14 or later. The preview package contains Apple Silicon and Intel binaries, uses ad-hoc signing and is not notarized by Apple. The full first-download, permission and usage flow has not been tested on another Mac, nor has first installation been verified separately on both architectures.
 
 ### Build from source
 
@@ -66,9 +66,13 @@ The Apple build script produces a universal library for Apple Silicon and Intel.
 
 Release builds use ad-hoc signing unless you copy [Local.xcconfig.example](mac/Local.xcconfig.example) to `mac/Local.xcconfig` and set your own Apple Development team before building. This local file is ignored by Git. Apple Development is a development signature; it is not a [Developer ID signature](https://developer.apple.com/developer-id/) for distribution and does not mean the app is notarized.
 
-### If you receive a complete trial app
+The [packaging script](mac/scripts/package-release.sh) builds a clean committed source tree, excludes local signing settings and replaces build paths with generic paths. To repeat this build, run `bash mac/scripts/package-release.sh v0.1.0-preview.1 0.1.0-preview.1`. Different toolchains are not guaranteed to produce byte-identical ZIPs.
 
-If the project maintainer supplies a complete `DeAI.app` later, extract it, move it into Applications (`/Applications` or `~/Applications`) and open it from that fixed location. Recipients of the complete app do not need Xcode or Rust. Follow the instructions supplied with that particular build; there is currently no trial download link.
+### Install the preview
+
+Extract the ZIP linked above, move the complete `DeAI.app` into Applications (`/Applications` or `~/Applications`) and open it from that fixed location. Xcode and Rust are not needed. GitHub's automatically generated Source code archives contain source, not the installable app.
+
+Put the ZIP and `SHA256SUMS.txt` in the same directory and run `shasum -a 256 -c SHA256SUMS.txt` to verify the download. See the [preview installation notes](docs/releases/v0.1.0-preview.1.md) for details.
 
 ### If macOS blocks the first launch
 

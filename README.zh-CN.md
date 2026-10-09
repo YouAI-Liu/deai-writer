@@ -38,9 +38,9 @@ DeAI 通过 macOS 辅助功能读取和修改文字，需要目标应用提供�
 
 ## 构建与安装
 
-目前没有发布 GitHub Release 或现成安装包，也没有上架 App Store。现在可以从源码构建；下方也说明了以后收到完整试用包时的安装方法。
+下载首个测试版：[DeAI 0.1.0 Preview 1](https://github.com/YouAI-Liu/deai-writer/releases/tag/v0.1.0-preview.1) · [macOS 通用 ZIP](https://github.com/YouAI-Liu/deai-writer/releases/download/v0.1.0-preview.1/DeAI-0.1.0-preview.1-macOS-universal.zip) · [SHA-256 校验文件](https://github.com/YouAI-Liu/deai-writer/releases/download/v0.1.0-preview.1/SHA256SUMS.txt)。DeAI 尚未上架 App Store，也可按下方步骤从源码构建。
 
-最低系统要求为 macOS 14。当前核验的 Release 产物包含 Apple Silicon 和 Intel 两种架构，使用 ad-hoc（临时）签名，未经过 Apple 公证。尚未完成另一台 Mac 从首次下载、授权到实际使用的完整验证，也未分别完成两种架构的首次安装验证。
+最低系统要求为 macOS 14。测试版安装包包含 Apple Silicon 和 Intel 两种架构，使用 ad-hoc（临时）签名，未经过 Apple 公证。尚未完成另一台 Mac 从首次下载、授权到实际使用的完整验证，也未分别完成两种架构的首次安装验证。
 
 ### 从源码构建
 
@@ -66,9 +66,13 @@ Apple 构建脚本生成同时包含 Apple Silicon 和 Intel 架构的通用库�
 
 Release 默认使用 ad-hoc 签名。如需使用自己的 Apple Development 身份，在构建前将 [Local.xcconfig.example](mac/Local.xcconfig.example) 复制为 `mac/Local.xcconfig`，填入自己的开发者团队。这个本地文件已被 Git 忽略。Apple Development 是开发签名，不等于用于对外分发的 [Developer ID 签名](https://developer.apple.com/developer-id/)，也不代表应用已公证。
 
-### 收到完整试用包时
+发布包通过[打包脚本](mac/scripts/package-release.sh)从指定提交的干净源码构建，排除本地签名配置，并将编译路径替换为通用路径。复现本次构建可运行 `bash mac/scripts/package-release.sh v0.1.0-preview.1 0.1.0-preview.1`；这不保证不同工具链产生逐字节相同的 ZIP。
 
-如果以后从项目维护者处收到完整的 `DeAI.app`，先解压，再将应用放入“应用程序”（`/Applications` 或 `~/Applications`），从这个固定位置打开。完整应用不需要接收方安装 Xcode 或 Rust。请以实际提供的包和说明为准，目前没有可下载的试用包链接。
+### 安装测试版
+
+下载上方 ZIP 后解压，将完整的 `DeAI.app` 放入“应用程序”（`/Applications` 或 `~/Applications`），从这个固定位置打开。不需要安装 Xcode 或 Rust；Release 页面自动生成的 Source code 压缩包是源码，不是安装包。
+
+将 ZIP 与 `SHA256SUMS.txt` 放在同一目录，可运行 `shasum -a 256 -c SHA256SUMS.txt` 核对下载内容。更多说明见[测试版安装说明](docs/releases/v0.1.0-preview.1.md)。
 
 ### macOS 阻止首次打开时
 
