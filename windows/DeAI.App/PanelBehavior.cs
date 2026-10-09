@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 using DeAI.Automation;
 
 namespace DeAI.App;
@@ -52,7 +53,22 @@ internal sealed class PanelBehavior : IDisposable
     {
         var handle = new WindowInteropHelper(window).Handle;
         if (window.IsVisible && handle != IntPtr.Zero)
+        {
             SetWindowPos(handle, new IntPtr(-1), 0, 0, 0, 0, 0x13);
+            RaisePopups();
+        }
+    }
+    public static void RaisePopup(Visual popup)
+    {
+        if (PresentationSource.FromVisual(popup) is HwndSource source && source.Handle != IntPtr.Zero)
+            SetWindowPos(source.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x13);
+    }
+    private static void RaisePopups()
+    {
+        // WPF popup HWNDs are separate from Application.Windows.
+        foreach (PresentationSource source in PresentationSource.CurrentSources)
+            if (source is HwndSource hwnd && hwnd.RootVisual != null && hwnd.RootVisual is not Window)
+                RaisePopup(hwnd.RootVisual);
     }
     public static void Place(Window window, ScreenRect anchor)
     {
@@ -68,6 +84,7 @@ internal sealed class PanelBehavior : IDisposable
         if (y + height > area.Bottom) y = (int)anchor.Y - height + 14;
         y = Math.Clamp(y, area.Top, Math.Max(area.Top, area.Bottom - height));
         SetWindowPos(handle, new IntPtr(-1), x, y, 0, 0, 0x11);
+        RaisePopups();
     }
     private void Unhook()
     {

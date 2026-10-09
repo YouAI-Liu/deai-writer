@@ -99,7 +99,7 @@ internal sealed class SuggestionWindow : Window
         rewrite.IsEnabled = !busy; actions.Children.Add(rewrite);
         var ignore = Ui.Icon("⊘", Ui.L("忽略", "Ignore"), () => controller.Ignore(selected), "IgnoreFinding"); ignore.IsEnabled = !busy; actions.Children.Add(ignore);
         var menu = new ContextMenu();
-        menu.Opened += (_, _) => popupOpen = true; menu.Closed += (_, _) => popupOpen = false;
+        menu.Opened += (_, _) => { popupOpen = true; PanelBehavior.RaisePopup(menu); }; menu.Closed += (_, _) => popupOpen = false;
         AddMenu(menu, Ui.L("定位原文", "Locate original"), async () => await controller.Locate(target, selected), "LocateFinding");
         AddMenu(menu, Ui.L("复制建议", "Copy suggestion"), () => { if (replacements.SelectedItem is SuggestionItem item && item.Text.Length > 0) Clipboard.SetText(item.Text); }, "CopySuggestion");
         AddMenu(menu, Ui.L("保留此词", "Keep this word"), () => Remember(new PersonalEntry("keep", matched, null)), "KeepTerm");
