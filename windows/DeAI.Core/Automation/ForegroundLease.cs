@@ -18,7 +18,8 @@ internal sealed class FocusHistory
     }
     internal void Observe(IntPtr window, bool ownProcess)
     {
-        if (ownProcess || window == Owner) return;
+        // Windows can report no foreground window while activation is in progress.
+        if (window == IntPtr.Zero || ownProcess || window == Owner) return;
         Owner = window; Version++;
     }
     internal bool Matches(IntPtr owner, long version, IntPtr foreground, bool ownProcess) =>

@@ -46,7 +46,20 @@ internal static class FeatureTests
             history.Observe(b, false); Equal(false, history.Matches(a, version, ui, true));
             history.Observe(a, false); Equal(false, history.Matches(a, version, a, false));
             Equal(true, history.Matches(a, history.Version, ui, true));
-            history.Observe(IntPtr.Zero, false); Equal(false, history.Matches(a, history.Version, ui, true));
+            history.Observe(IntPtr.Zero, false); Equal(false, history.Matches(a, history.Version, IntPtr.Zero, false));
+        });
+        Check("Transient empty foreground rejects an action without destroying the external lease", () =>
+        {
+            var history = new FocusHistory(); var a = new IntPtr(1); var b = new IntPtr(2); var ui = new IntPtr(3);
+            history.Observe(a, false); var version = history.Version;
+            history.Observe(ui, true); history.Observe(IntPtr.Zero, false);
+            Equal(version, history.Version); Equal(a, history.Owner);
+            Equal(false, history.Matches(a, version, IntPtr.Zero, false));
+            history.Observe(a, false); Equal(true, history.Matches(a, version, a, false));
+            history.Observe(IntPtr.Zero, false); history.Observe(b, false); history.Observe(ui, true);
+            Equal(false, history.Matches(a, version, ui, true));
+            history.Observe(IntPtr.Zero, false); history.Observe(a, false);
+            Equal(false, history.Matches(a, version, a, false));
         });
         Check("Focus lease invalidates same-window Edit changes without reading text", () =>
         {

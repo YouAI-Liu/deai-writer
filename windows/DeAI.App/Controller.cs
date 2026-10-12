@@ -148,7 +148,11 @@ internal sealed class Controller : IDisposable
             var rectangles = await worker.Run(_ =>
             {
                 if (preferences != Preferences) throw new InvalidOperationException("设置已变化，请重新检查。");
-                ValidateFocus(target); target.Validate(); SetForegroundWindow(target.WindowHandle); target.Select(finding.Start, finding.End); return target.Locate(finding.Start, finding.End);
+                ValidateFocus(target); target.Validate();
+                var locations = target.Locate(finding.Start, finding.End);
+                target.Select(finding.Start, finding.End);
+                SetForegroundWindow(target.WindowHandle);
+                return locations;
             });
             if (rectangles.Count == 0) throw new InvalidOperationException(Ui.L("目标未提供可见范围坐标。", "Target did not provide visible geometry."));
             highlight.Show(rectangles.Select(rect => new LocatedFinding(finding, rect)).ToArray(), preferences.Underline);
