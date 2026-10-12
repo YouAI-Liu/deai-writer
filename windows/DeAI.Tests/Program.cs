@@ -58,6 +58,15 @@ public static class Program
             Check("UIA selection of second line", () => { var start = target.Original.IndexOf("It is", StringComparison.Ordinal); target.Select(start, start + 2); Equal(new TextSpan(start, start + 2), TextTarget.Capture(plain, automation)!.Selection); });
             Check("UIA safe write from Rust suggestion", () => { if (!target.CanWrite || finding == null) throw new Exception("Not writable / no finding"); target.Replace(finding.Start, finding.End, finding.Suggestions[0]); Equal("😀 我们需要认真检查。\r\nIt is worth noting that we delve into details.", TextTarget.Capture(plain, automation)!.Original); });
             Check("UIA stale write blocked", () => Reject(() => target.Replace(3, 7, "danger")));
+            Check("UIA focus event receives cached identity without reading text", () =>
+            {
+                using var received = new AutoResetEvent(false);
+                var rich = Find("RichText"); var identity = rich.GetRuntimeId();
+                using var worker = new AutomationWorker((pid, id) => { if (pid == fixture.Id && id.AsSpan().SequenceEqual(identity)) received.Set(); });
+                worker.Run(_ => true).GetAwaiter().GetResult();
+                rich.SetFocus();
+                if (!received.WaitOne(TimeSpan.FromSeconds(5))) throw new Exception("Missing cached UIA focus identity");
+            });
             Check("UIA password not read", () => Equal<TextTarget?>(null, TextTarget.Capture(Find("Password"), automation)));
             Check("UIA rich text write blocked", () => { var rich = TextTarget.Capture(Find("RichText"), automation)!; Equal(false, rich.CanWrite); Reject(() => rich.Replace(0, 0, "danger")); });
             Check("UIA rewrite keeps selected paragraph terminator and next paragraph", () =>

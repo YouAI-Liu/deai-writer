@@ -48,6 +48,13 @@ internal static class FeatureTests
             Equal(true, history.Matches(a, history.Version, ui, true));
             history.Observe(IntPtr.Zero, false); Equal(false, history.Matches(a, history.Version, ui, true));
         });
+        Check("Focus lease invalidates same-window Edit changes without reading text", () =>
+        {
+            var history = new FocusHistory(); history.ObserveFocus(1, new[] { 10, 20 }, false); var version = history.FocusVersion;
+            history.ObserveFocus(2, new[] { 30 }, true); Equal(version, history.FocusVersion);
+            history.ObserveFocus(1, new[] { 10, 21 }, false); Equal(version + 1, history.FocusVersion);
+            history.ObserveFocus(1, new[] { 10, 20 }, false); Equal(version + 2, history.FocusVersion);
+        });
         Check("Classic Notepad eligibility is narrow", () =>
         {
             var path = Path.Combine(Environment.SystemDirectory, "notepad.exe");

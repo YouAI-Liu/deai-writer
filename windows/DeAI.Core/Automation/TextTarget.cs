@@ -18,6 +18,7 @@ public sealed class TextTarget
     private ForegroundLease? focus;
     private readonly int pid;
     private readonly int[] runtimeId;
+    private int[] focusId;
     public string Original { get; }
     public string ProcessName { get; }
     public TextSpan? Selection { get; }
@@ -37,6 +38,7 @@ public sealed class TextTarget
         this.element = element;
         pid = element.CurrentProcessId;
         runtimeId = element.GetRuntimeId();
+        focusId = runtimeId;
         ProcessName = AppPolicy.ProcessName(pid);
         pattern = element.GetCurrentPattern(TextPatternId) as IUIAutomationTextPattern;
         value = element.GetCurrentPattern(ValuePatternId) as IUIAutomationValuePattern;
@@ -65,7 +67,9 @@ public sealed class TextTarget
             if (candidate.CurrentControlType == EditControl || candidate.CurrentControlType == DocumentControl)
             {
                 if (expectedWindow != IntPtr.Zero && OwnerWindow(candidate, automation) != expectedWindow) return null;
-                return Capture(candidate, automation, browsersEnabled, excluded);
+                var target = Capture(candidate, automation, browsersEnabled, excluded);
+                if (target != null) target.focusId = focused.GetRuntimeId();
+                return target;
             }
             if (candidate.CurrentControlType == WindowControl) break;
             candidate = automation.ControlViewWalker.GetParentElement(candidate);
@@ -106,7 +110,7 @@ public sealed class TextTarget
     public void BindFocus(ForegroundLease lease)
     {
         if (lease.Owner != WindowHandle) throw new InvalidOperationException("焦点快照与目标窗口不一致。");
-        lease.Validate(); focus = lease;
+        lease.Bind(pid, focusId); focus = lease;
     }
 
     private static bool SameId(int[] a, int[] b) => a.AsSpan().SequenceEqual(b);

@@ -7,6 +7,15 @@ internal sealed class FocusHistory
 {
     internal IntPtr Owner { get; private set; }
     internal long Version { get; private set; }
+    internal long FocusVersion { get; private set; }
+    private int focusPid;
+    private int[] focusId = Array.Empty<int>();
+    internal void ObserveFocus(int pid, int[] id, bool ownProcess)
+    {
+        if (ownProcess) return;
+        if (pid > 0 && id.Length > 0 && pid == focusPid && id.AsSpan().SequenceEqual(focusId)) return;
+        focusPid = pid; focusId = (int[])id.Clone(); FocusVersion++;
+    }
     internal void Observe(IntPtr window, bool ownProcess)
     {
         if (ownProcess || window == Owner) return;
@@ -21,8 +30,10 @@ public sealed class ForegroundLease
     private readonly ForegroundTracker tracker;
     internal IntPtr Owner { get; }
     internal long Version { get; }
+    internal long? FocusVersion { get; set; }
     internal ForegroundLease(ForegroundTracker tracker, IntPtr owner, long version) { this.tracker = tracker; Owner = owner; Version = version; }
     public void Validate() => tracker.Validate(this);
+    internal void Bind(int pid, int[] id) => tracker.Bind(this, pid, id);
 }
 
 public sealed class ForegroundTracker : IDisposable
@@ -57,8 +68,20 @@ public sealed class ForegroundTracker : IDisposable
             var foreground = GetForegroundWindow();
             var ownProcess = OwnProcess(foreground);
             history.Observe(foreground, ownProcess);
-            if (disposed || !history.Matches(lease.Owner, lease.Version, foreground, ownProcess))
+            if (disposed || !history.Matches(lease.Owner, lease.Version, foreground, ownProcess)
+                || (lease.FocusVersion != null && lease.FocusVersion != history.FocusVersion))
                 throw new InvalidOperationException("焦点已切换，请重新聚焦目标并检查。");
+        }
+    }
+    public void ObserveFocus(int pid, int[] id)
+    {
+        lock (history) history.ObserveFocus(pid, id, pid == Environment.ProcessId);
+    }
+    internal void Bind(ForegroundLease lease, int pid, int[] id)
+    {
+        lock (history)
+        {
+            ObserveFocus(pid, id); lease.FocusVersion = history.FocusVersion; Validate(lease);
         }
     }
     private static bool OwnProcess(IntPtr window)

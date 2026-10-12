@@ -20,7 +20,7 @@ internal sealed class Controller : IDisposable
     public SkillStore Skills { get; }
     public Preferences Preferences { get; private set; }
     public PersonalEntry[] Lexicon { get; private set; }
-    private readonly AutomationWorker worker = new();
+    private readonly AutomationWorker worker;
     private readonly ForegroundTracker foreground = new();
     private readonly ConditionalWeakTable<TextTarget, ForegroundLease> leases = new();
     private readonly NativeChecker checker = new();
@@ -38,6 +38,7 @@ internal sealed class Controller : IDisposable
     private bool busy, disposed;
     public Controller()
     {
+        worker = new(foreground.ObserveFocus);
         Preferences = Store.Load("settings.json", new Preferences()); Preferences.Validate();
         Lexicon = Store.Load("lexicon.json", Array.Empty<PersonalEntry>()); DataStore.ValidateLexicon(Lexicon);
         Skills = new SkillStore(Store); Ui.Language = Preferences.Language;
