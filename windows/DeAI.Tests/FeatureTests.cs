@@ -26,6 +26,34 @@ internal static class FeatureTests
     [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr window, int id);
     public static void Run()
     {
+        Check("Focused capture stops after four empty reads", () =>
+        {
+            var count = 0;
+            Equal<TextTarget?>(null, AutomationWorker.RetryFocusedRead(() => { count++; return Task.FromResult<TextTarget?>(null); }).GetAwaiter().GetResult());
+            Equal(4, count);
+        });
+        Check("Focused capture retries only transient UIA availability failures", () =>
+        {
+            var count = 0;
+            try { AutomationWorker.RetryFocusedRead(() => { count++; throw new COMException("synthetic", unchecked((int)0x80040201)); }).GetAwaiter().GetResult(); throw new Exception("Expected bounded failure"); }
+            catch (COMException) { Equal(4, count); }
+            count = 0;
+            try { AutomationWorker.RetryFocusedRead(() => { count++; throw new COMException("synthetic", unchecked((int)0x80070005)); }).GetAwaiter().GetResult(); throw new Exception("Expected permission failure"); }
+            catch (COMException) { Equal(1, count); }
+        });
+        Check("Focused capture does not retry focus or safety validation failures", () =>
+        {
+            var count = 0;
+            Reject(() => AutomationWorker.RetryFocusedRead(() => { count++; throw new InvalidOperationException("synthetic focus change"); }).GetAwaiter().GetResult());
+            Equal(1, count);
+        });
+        Check("Unexpected UI errors include diagnostic identity but not exception content", () =>
+        {
+            var error = new COMException("synthetic private content", unchecked((int)0x80040201));
+            var message = DeAI.App.Ui.ErrorMessage(error);
+            if (!message.Contains("COMException", StringComparison.Ordinal) || !message.Contains("0x80040201", StringComparison.Ordinal) || message.Contains(error.Message, StringComparison.Ordinal))
+                throw new Exception("Unsafe or missing error diagnostics");
+        });
         Check("Rewrite snapshot rejects privacy, provider, lexicon and Skill changes", () =>
         {
             var preferences = new Preferences(); var entries = Array.Empty<PersonalEntry>(); var skill = Skill.Builtin;

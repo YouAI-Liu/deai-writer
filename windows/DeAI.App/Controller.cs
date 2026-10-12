@@ -96,10 +96,14 @@ internal sealed class Controller : IDisposable
             var preferences = Preferences; var entries = Lexicon; var previous = current;
             var owner = GetForegroundWindow();
             var lease = foreground.Capture(owner);
-            var result = await worker.Run(automation =>
+            var target = await worker.ReadFocused(automation =>
             {
                 lease.Validate();
-                var target = TextTarget.Focused(automation, preferences.BrowsersEnabled, preferences.ExcludedApps, preferences.AllowsProcess, owner);
+                if (preferences != Preferences || entries != Lexicon) return null;
+                return TextTarget.Focused(automation, preferences.BrowsersEnabled, preferences.ExcludedApps, preferences.AllowsProcess, owner);
+            });
+            var result = await worker.Run(_ =>
+            {
                 if (target == null || target.WindowHandle != GetForegroundWindow()) return null;
                 lease.Validate();
                 target.BindFocus(lease);

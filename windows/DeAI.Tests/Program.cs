@@ -51,6 +51,12 @@ public static class Program
             Thread.Sleep(150);
             var target = TextTarget.Capture(plain, automation)!;
             Finding? finding = null;
+            Check("Focused capture returns a recovered target without extra reads", () =>
+            {
+                var attempts = 0;
+                Equal(target, AutomationWorker.RetryFocusedRead(() => System.Threading.Tasks.Task.FromResult(++attempts < 3 ? null : target)).GetAwaiter().GetResult());
+                Equal(3, attempts);
+            });
             Check("Rust DLL check via UIA", () => { foreach (var f in new NativeChecker().Check(target.Original, new CheckOptions(Grammar: false))) if (f.RuleId == "zh.banned_opener") finding = f; if (finding == null || finding.Start != 3) throw new Exception("Expected UTF-16 finding"); });
             Check("UIA read with emoji and CRLF", () => { if (!target.Original.StartsWith("😀 说白了，", StringComparison.Ordinal) || !target.Original.Contains("\r\n")) throw new Exception("Text changed"); });
             Check("UIA selection UTF-16", () => Equal(new TextSpan(3, 7), target.Selection));

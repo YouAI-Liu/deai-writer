@@ -10,6 +10,8 @@ using System.Windows.Data;
 using System.Globalization;
 using System.Linq;
 using Microsoft.Win32;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 
 namespace DeAI.App;
 
@@ -196,7 +198,18 @@ internal static class Ui
         };
         if (id != null) AutomationProperties.SetAutomationId(text, id); return text;
     }
-    public static void Error(Exception error) => MessageBox.Show(error is InvalidOperationException ? error.Message : L("操作失败；原文未主动覆盖。请重试或检查配置/目标权限。", "Operation failed. Check configuration/target permissions and retry."), "DeAI", MessageBoxButton.OK, MessageBoxImage.Warning);
+    internal static string ErrorMessage(Exception error) => error is InvalidOperationException ? error.Message
+        : L("操作失败；请重新聚焦目标或检查配置/权限。", "Operation failed. Refocus the target or check configuration/permissions.") + $"\n({error.GetType().Name}, 0x{error.HResult:X8})";
+    public static void Error(Exception error)
+    {
+        var windows = Application.Current.Windows.OfType<Window>().Where(window => window.IsVisible).ToArray();
+        var owner = windows.LastOrDefault(window => window.IsActive) ?? windows.LastOrDefault();
+        // User-triggered errors must remain visible above the editor and the floating panels.
+        const uint warning = 0x30, taskModal = 0x2000, setForeground = 0x10000, topmost = 0x40000;
+        MessageBoxW(owner == null ? IntPtr.Zero : new WindowInteropHelper(owner).Handle, ErrorMessage(error), "DeAI", warning | taskModal | setForeground | topmost);
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int MessageBoxW(IntPtr owner, string text, string caption, uint flags);
 }
 
 public sealed class PillRadiusConverter : IValueConverter

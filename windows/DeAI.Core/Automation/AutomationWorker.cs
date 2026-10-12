@@ -43,6 +43,20 @@ public sealed class AutomationWorker : IDisposable
         });
         return result.Task;
     }
+    public Task<TextTarget?> ReadFocused(Func<IUIAutomation, TextTarget?> read) => RetryFocusedRead(() => Run(read));
+    internal static async Task<TextTarget?> RetryFocusedRead(Func<Task<TextTarget?>> read)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var target = await read();
+                if (target != null || attempt == 3) return target;
+            }
+            catch (COMException error) when (attempt < 3 && error.HResult is unchecked((int)0x80040201) or unchecked((int)0x80010001)) { }
+            await Task.Delay(150);
+        }
+    }
     public void Dispose()
     {
         queue.Add(() => { try { if (automation != null && focusHandler != null) automation.RemoveFocusChangedEventHandler(focusHandler); } catch { } });

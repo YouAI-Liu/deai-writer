@@ -46,17 +46,25 @@ AI 服务可保存多个配置，每个配置的密钥单独用 DPAPI **CurrentU
 
 ## 安全边界与兼容范围
 
-所有 finding/选区都是 **UTF-16 code unit offsets**。选区定位通过真实 UIA range prefix 文本计数，不把 UIA Character 移动数当作 UTF-16 偏移；emoji 不可拆分。写回前重新检查 RuntimeId、控件状态、原文与 ValuePattern 值，写回后再次读取验证；不使用剪贴板/模拟按键写回。
+所有 finding/选区都是 **UTF-16 code unit offsets**。选区定位通过真实 UIA range prefix 文本计数，不把 UIA Character 移动数当作 UTF-16 偏移；emoji 不可拆分。写回前重新检查 RuntimeId、控件状态、原文与写入能力，写回后再次读取验证；不使用剪贴板/模拟按键写回。
+
+目标会话绑定外部前台窗口版本及 UIA 焦点 RuntimeId。切换其他窗口或同窗口的其他编辑控件后，旧定位/写回失效；切回原窗口也必须重新检查。DeAI 自身卡片、菜单、设置及错误提示不使外部会话失效。Windows 激活期间短暂的空前台窗口不会永久删除历史身份，但当下没有明确前台窗口时仍拒绝操作。
+
+经典记事本仅对系统目录 `notepad.exe`、`Notepad` owner/root、标准 Win32 Unicode 多行 `Edit` 做专用适配；校验进程启动时间、HWND、可见/启用/非密码/非只读状态，UIA 与原生原文必须一致。使用有超时的 `EM_SETSEL`/`EM_REPLACESEL` 局部替换并保留 Undo；写回前再次校验选区和焦点，写回后 UIA/原生双读回。不开放其他 Document，不重试或自动回滚写入。
+
+首次目标捕获最多尝试四次（间隔 150ms），只重试空结果或临时 UIA 元素不可用/调用被拒绝；每次仍检查前台会话及最新配置。焦点/安全校验、权限失败不重试，定位/写回也不使用这条重试路径。AI 请求前、响应后及接受前校验 provider/隐私设置、词库及所选 Skill 快照；变化时要求重新打开面板。
 
 | 目标 | 本次验证 / 策略 |
 | --- | --- |
 | 合成 WPF TextBox | 已验证读取 → Rust 检查 → emoji/CRLF 选区/定位 → ValuePattern 安全写回与原文变更拒绝 |
 | 合成 PasswordBox | 拒绝读取 |
-| 合成 RichTextBox / Document | 只读、定位；拒绝自动写回，防止破坏格式 |
+| 合成 RichTextBox / Document | 默认只读、定位；经典系统记事本专用适配以外拒绝自动写回，防止破坏格式 |
 | Win32 Edit | 实现受限 ValuePattern 写回，**第三方应用尚未验证** |
-| classic Notepad 10.0.20348.1（Server 2022） | 合成新文档读取、emoji 后 UTF-16 定位、复制通过；目标只读，**自动写回不可用** |
+| classic Notepad 10.0.20348.1（Server 2022） | 真实新建合成文档读取 → Rust → emoji 后 UTF-16 定位 → 受限写回 → 双读回 → Undo 通过；旧原文、跨窗及切回后的旧会话拒绝通过 |
 | Word / Office / 现代 Notepad / 第三方编辑器 | **未验证，不承诺兼容**；只支持满足安全能力判定的目标 |
-| Chrome / Edge / Firefox 等浏览器 | 默认不读取；设置可实验性开启，但浏览器/富文本写回未验证 |
+| Edge 155.0.4283.45（Server 2022） | 默认拒绝；显式开启后合成 input/textarea/contenteditable Edit 读取/定位通过，Accept 禁用；disabled 点击落入页面 Document 时拒绝整页读取。首次捕获仍需有限冷启动回归，不承诺所有页面稳定 |
+| Chrome Stable / Firefox | 未验证；默认不读取，不能继承 Edge 结果 |
+| Notepad++ 8.9.8.1 / LibreOffice Writer 26.8.0.3 | 先前真实默认配置未暴露可用 UIA 正文目标，BLOCKED；不冒充 Office 支持 |
 | 终端、常见密码管理器、DeAI 自身 | 按进程策略排除；任意 UIA 密码字段也会拒绝 |
 | 提权窗口、安全桌面、远程桌面断开/锁屏 | 未验证/可能不可访问，不请求 uiAccess 或管理员权限 |
 | Windows ARM64、Windows 10/11 实机、多显示器/混合 DPI | 未验证；本次构建/fixture 在 Windows Server 2022 x64 交互 VM 验证 |
