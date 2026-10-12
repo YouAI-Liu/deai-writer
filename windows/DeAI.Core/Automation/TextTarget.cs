@@ -14,6 +14,8 @@ public sealed class TextTarget
     private readonly IUIAutomationElement element;
     private readonly IUIAutomationTextPattern? pattern;
     private readonly IUIAutomationValuePattern? value;
+    private readonly ClassicNotepadEdit? notepad;
+    private ForegroundLease? focus;
     private readonly int pid;
     private readonly int[] runtimeId;
     public string Original { get; }
@@ -40,12 +42,12 @@ public sealed class TextTarget
         value = element.GetCurrentPattern(ValuePatternId) as IUIAutomationValuePattern;
         Original = Read();
         WindowHandle = OwnerWindow(element, automation);
-        // Only plain Edit providers are eligible; Document/RichEdit is never flattened.
-        CanWrite = Writable() && string.Equals(value!.CurrentValue, Original, StringComparison.Ordinal);
+        notepad = ClassicNotepadEdit.TryCreate(element, WindowHandle, Original);
+        CanWrite = notepad != null || (Writable() && string.Equals(value!.CurrentValue, Original, StringComparison.Ordinal));
         Selection = ReadSelection();
     }
 
-    public static TextTarget? Focused(IUIAutomation automation, bool browsersEnabled = false, IEnumerable<string>? excluded = null, Func<string, bool>? processAllowed = null)
+    public static TextTarget? Focused(IUIAutomation automation, bool browsersEnabled = false, IEnumerable<string>? excluded = null, Func<string, bool>? processAllowed = null, IntPtr expectedWindow = default)
     {
         var focused = automation.GetFocusedElement();
         if (focused == null) return null;
@@ -61,7 +63,10 @@ public sealed class TextTarget
         {
             if (candidate.CurrentProcessId != focused.CurrentProcessId) return null;
             if (candidate.CurrentControlType == EditControl || candidate.CurrentControlType == DocumentControl)
+            {
+                if (expectedWindow != IntPtr.Zero && OwnerWindow(candidate, automation) != expectedWindow) return null;
                 return Capture(candidate, automation, browsersEnabled, excluded);
+            }
             if (candidate.CurrentControlType == WindowControl) break;
             candidate = automation.ControlViewWalker.GetParentElement(candidate);
         }
@@ -73,6 +78,7 @@ public sealed class TextTarget
         var info = element;
         if (info.CurrentControlType != EditControl && info.CurrentControlType != DocumentControl) return null;
         if (info.CurrentIsPassword != 0 || info.CurrentIsEnabled == 0 || info.CurrentIsOffscreen != 0 || !AppPolicy.IsAllowed(info.CurrentProcessId, browsersEnabled, excluded)) return null;
+        if (info.CurrentControlType == DocumentControl && AppPolicy.IsBrowser(AppPolicy.ProcessName(info.CurrentProcessId))) return null;
         if (element.GetCurrentPattern(TextPatternId) == null && element.GetCurrentPattern(ValuePatternId) == null) return null;
         return new TextTarget(element, automation);
     }
@@ -88,10 +94,19 @@ public sealed class TextTarget
 
     public void Validate()
     {
-        if (element.CurrentProcessId != pid || !SameId(runtimeId, element.GetRuntimeId()) || element.CurrentIsEnabled == 0)
+        focus?.Validate();
+        if (element.CurrentProcessId != pid || !SameId(runtimeId, element.GetRuntimeId()) || element.CurrentIsEnabled == 0 || element.CurrentIsPassword != 0)
             throw new InvalidOperationException("目标已失效。");
         if (!string.Equals(Read(), Original, StringComparison.Ordinal))
             throw new InvalidOperationException("原文已变化，请重新检查。");
+        notepad?.Validate(Original);
+        focus?.Validate();
+    }
+
+    public void BindFocus(ForegroundLease lease)
+    {
+        if (lease.Owner != WindowHandle) throw new InvalidOperationException("焦点快照与目标窗口不一致。");
+        lease.Validate(); focus = lease;
     }
 
     private static bool SameId(int[] a, int[] b) => a.AsSpan().SequenceEqual(b);
@@ -167,12 +182,13 @@ public sealed class TextTarget
     public void Replace(int start, int end, string replacement)
     {
         Validate();
-        if (!CanWrite || !Writable())
+        if (!CanWrite || (notepad == null && !Writable()))
             throw new InvalidOperationException("此应用未提供已验证的纯文本安全写回能力；请手动复制建议。");
-        var expected = TextSafety.Replace(Original, value!.CurrentValue, start, end, replacement);
+        var expected = TextSafety.Replace(Original, notepad == null ? value!.CurrentValue : Original, start, end, replacement);
         // No clipboard, simulated keystrokes or fallback on failure: never write into a different focus target.
         Validate();
-        value.SetValue(expected);
+        if (notepad != null) notepad.Replace(Original, start, end, replacement, () => focus?.Validate());
+        else value!.SetValue(expected);
         if (!string.Equals(Read(), expected, StringComparison.Ordinal))
             throw new InvalidOperationException("写回结果与预期不符；请检查文档，未尝试重试或回滚。");
     }

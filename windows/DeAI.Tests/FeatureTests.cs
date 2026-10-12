@@ -26,6 +26,44 @@ internal static class FeatureTests
     [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr window, int id);
     public static void Run()
     {
+        Check("Rewrite snapshot rejects privacy, provider, lexicon and Skill changes", () =>
+        {
+            var preferences = new Preferences(); var entries = Array.Empty<PersonalEntry>(); var skill = Skill.Builtin;
+            var snapshot = new RewriteSnapshot(preferences, entries, skill);
+            snapshot.Validate(preferences, entries, skill);
+            Reject(() => snapshot.Validate(preferences with { BrowsersEnabled = true }, entries, skill));
+            Reject(() => snapshot.Validate(preferences with { Provider = new Provider("https://example.com/v1") }, entries, skill));
+            Reject(() => snapshot.Validate(preferences with { ActiveProviderId = Guid.NewGuid().ToString("N") }, entries, skill));
+            Reject(() => snapshot.Validate(preferences, new[] { new PersonalEntry("keep", "synthetic", null) }, skill));
+            Reject(() => snapshot.Validate(preferences, entries, skill with { Body = "Changed synthetic instruction" }));
+        });
+        Check("Focus lease allows DeAI controls but rejects cross-window and switch-back", () =>
+        {
+            var history = new FocusHistory(); var a = new IntPtr(1); var b = new IntPtr(2); var ui = new IntPtr(3);
+            history.Observe(a, false); var version = history.Version;
+            Equal(true, history.Matches(a, version, a, false));
+            history.Observe(ui, true); Equal(true, history.Matches(a, version, ui, true));
+            history.Observe(b, false); Equal(false, history.Matches(a, version, ui, true));
+            history.Observe(a, false); Equal(false, history.Matches(a, version, a, false));
+            Equal(true, history.Matches(a, history.Version, ui, true));
+            history.Observe(IntPtr.Zero, false); Equal(false, history.Matches(a, history.Version, ui, true));
+        });
+        Check("Classic Notepad eligibility is narrow", () =>
+        {
+            var path = Path.Combine(Environment.SystemDirectory, "notepad.exe");
+            const uint style = 0x50300104;
+            Equal(true, ClassicNotepadEdit.Eligible("Win32", "Edit", "Notepad", path, style));
+            Equal(false, ClassicNotepadEdit.Eligible("Win32", "RichEditD2DPT", "Notepad", path, style));
+            Equal(false, ClassicNotepadEdit.Eligible("WPF", "Edit", "Notepad", path, style));
+            Equal(false, ClassicNotepadEdit.Eligible("Win32", "Edit", "#32770", path, style));
+            Equal(false, ClassicNotepadEdit.Eligible("Win32", "Edit", "Notepad", Path.Combine(Path.GetTempPath(), "notepad.exe"), style));
+            Equal(false, ClassicNotepadEdit.Eligible("Win32", "Edit", "Notepad", path, style | 0x0020));
+            Equal(false, ClassicNotepadEdit.Eligible("Win32", "Edit", "Notepad", path, style | 0x0800));
+            Equal(false, ClassicNotepadEdit.Eligible("Win32", "Edit", "Notepad", path, 0));
+        });
+        Check("Native partial replacement keeps UTF-16 and CRLF", () => Equal("😀 good\r\nSECOND", ClassicNotepadEdit.Expected("😀 bad\r\nSECOND", 3, 6, "good")));
+        Check("Native NUL replacement refused", () => Reject(() => ClassicNotepadEdit.Expected("bad", 0, 3, "good\0hidden")));
+        Check("Native surrogate split refused", () => Reject(() => ClassicNotepadEdit.Expected("😀 bad", 1, 2, "good")));
         Check("Hotkey unchanged / swapped / conflict retains old registrations", () =>
         {
             Exception? failure = null;

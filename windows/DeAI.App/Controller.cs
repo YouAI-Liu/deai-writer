@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -20,6 +21,8 @@ internal sealed class Controller : IDisposable
     public Preferences Preferences { get; private set; }
     public PersonalEntry[] Lexicon { get; private set; }
     private readonly AutomationWorker worker = new();
+    private readonly ForegroundTracker foreground = new();
+    private readonly ConditionalWeakTable<TextTarget, ForegroundLease> leases = new();
     private readonly NativeChecker checker = new();
     private readonly Hotkeys hotkeys = new();
     private readonly Highlight highlight = new();
@@ -90,15 +93,22 @@ internal sealed class Controller : IDisposable
         try
         {
             var preferences = Preferences; var entries = Lexicon; var previous = current;
+            var owner = GetForegroundWindow();
+            var lease = foreground.Capture(owner);
             var result = await worker.Run(automation =>
             {
-                var target = TextTarget.Focused(automation, preferences.BrowsersEnabled, preferences.ExcludedApps, preferences.AllowsProcess);
+                lease.Validate();
+                var target = TextTarget.Focused(automation, preferences.BrowsersEnabled, preferences.ExcludedApps, preferences.AllowsProcess, owner);
                 if (target == null || target.WindowHandle != GetForegroundWindow()) return null;
-                if (!show && previous != null && previous.Target.SameTarget(target) && previous.Target.Original == target.Original) return previous;
+                lease.Validate();
+                target.BindFocus(lease);
+                leases.Add(target, lease);
+                if (!show && previous != null && previous.Target.SameTarget(target) && previous.Target.Original == target.Original && FocusValid(previous.Target)) return previous;
                 var findings = checker.Check(target.Original, preferences.OptionsForProcess(target.ProcessName), entries).Where(f => !preferences.DisabledRules.Contains(f.RuleId)).ToArray();
                 return new CheckResult(target, findings);
             });
             if (preferences != Preferences || entries != Lexicon) return;
+            lease.Validate();
             if (result == null)
             {
                 highlight.Clear();
@@ -113,7 +123,7 @@ internal sealed class Controller : IDisposable
             var locations = await worker.Run(_ =>
             {
                 if (preferences != Preferences || result.Target.WindowHandle != GetForegroundWindow()) return Array.Empty<LocatedFinding>();
-                result.Target.Validate();
+                ValidateFocus(result.Target); result.Target.Validate();
                 return visible.SelectMany(f => result.Target.Locate(f.Start, f.End).Select(rect => new LocatedFinding(f, rect))).Take(64).ToArray();
             });
             if (preferences == Preferences) highlight.Show(locations, preferences.Underline);
@@ -137,7 +147,7 @@ internal sealed class Controller : IDisposable
             var rectangles = await worker.Run(_ =>
             {
                 if (preferences != Preferences) throw new InvalidOperationException("设置已变化，请重新检查。");
-                target.Validate(); SetForegroundWindow(target.WindowHandle); target.Select(finding.Start, finding.End); return target.Locate(finding.Start, finding.End);
+                ValidateFocus(target); target.Validate(); SetForegroundWindow(target.WindowHandle); target.Select(finding.Start, finding.End); return target.Locate(finding.Start, finding.End);
             });
             if (rectangles.Count == 0) throw new InvalidOperationException(Ui.L("目标未提供可见范围坐标。", "Target did not provide visible geometry."));
             highlight.Show(rectangles.Select(rect => new LocatedFinding(finding, rect)).ToArray(), preferences.Underline);
@@ -152,7 +162,7 @@ internal sealed class Controller : IDisposable
             return await worker.Run(_ =>
             {
                 if (!target.IsAllowed(preferences.BrowsersEnabled, preferences.ExcludedApps) || !preferences.AllowsProcess(target.ProcessName)) return null;
-                target.Validate(); return target.Locate(finding.Start, finding.End).FirstOrDefault();
+                ValidateFocus(target); target.Validate(); return target.Locate(finding.Start, finding.End).FirstOrDefault();
             });
         }
         catch { return null; }
@@ -160,16 +170,26 @@ internal sealed class Controller : IDisposable
     public async Task ValidateTarget(TextTarget target)
     {
         var preferences = Preferences;
-        await worker.Run(_ => { if (!target.IsAllowed(preferences.BrowsersEnabled, preferences.ExcludedApps) || !preferences.AllowsProcess(target.ProcessName)) throw new InvalidOperationException("目标已被应用策略排除。"); target.Validate(); return true; });
+        await worker.Run(_ => { ValidateFocus(target); if (!target.IsAllowed(preferences.BrowsersEnabled, preferences.ExcludedApps) || !preferences.AllowsProcess(target.ProcessName)) throw new InvalidOperationException("目标已被应用策略排除。"); target.Validate(); return true; });
         if (preferences != Preferences) throw new InvalidOperationException("设置已变化，请重新检查。");
     }
-    public async Task<bool> Apply(TextTarget target, int start, int end, string replacement)
+    private void ValidateFocus(TextTarget target)
+    {
+        if (!leases.TryGetValue(target, out var lease)) throw new InvalidOperationException("目标未绑定焦点快照，请重新检查。");
+        lease.Validate();
+    }
+    private bool FocusValid(TextTarget target)
+    {
+        try { ValidateFocus(target); return true; }
+        catch (InvalidOperationException) { return false; }
+    }
+    public async Task<bool> Apply(TextTarget target, int start, int end, string replacement, Action? validateContext = null)
     {
         try
         {
             var preferences = Preferences;
             await ValidateTarget(target);
-            await worker.Run(_ => { if (preferences != Preferences) throw new InvalidOperationException("设置已变化，请重新检查。"); target.Replace(start, end, replacement); return true; });
+            await worker.Run(_ => { ValidateFocus(target); if (preferences != Preferences) throw new InvalidOperationException("设置已变化，请重新检查。"); validateContext?.Invoke(); target.Replace(start, end, replacement); return true; });
             current = null; ignored.Clear(); highlight.Clear();
             suggestions.Render(null, Array.Empty<Finding>(), Ui.L("已写回并验证。请重新聚焦目标进行检查。", "Applied and verified. Refocus target to check again."));
             return true;
@@ -191,7 +211,7 @@ internal sealed class Controller : IDisposable
     }
     public void Dispose()
     {
-        disposed = true; timer.Stop(); trayMenu?.Close(); rewrite?.Close(); settings?.Close(); suggestions.Exit(); highlight.Dispose(); hotkeys.Dispose(); tray.Dispose(); trayIcon.Dispose(); worker.Dispose();
+        disposed = true; timer.Stop(); trayMenu?.Close(); rewrite?.Close(); settings?.Close(); suggestions.Exit(); highlight.Dispose(); hotkeys.Dispose(); tray.Dispose(); trayIcon.Dispose(); worker.Dispose(); foreground.Dispose();
     }
     public IReadOnlyList<Finding> TestRules(string text) => checker.Check(text, Preferences.Options, Lexicon);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();

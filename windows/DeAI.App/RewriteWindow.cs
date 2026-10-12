@@ -18,6 +18,7 @@ internal sealed class RewriteWindow : Window
     private readonly TextSpan scope;
     private readonly Skill skill;
     private readonly Preferences preferences;
+    private readonly RewriteSnapshot snapshot;
     private readonly string source;
     private readonly StackPanel body, state = new(), remember = new();
     private readonly TextBox output;
@@ -29,6 +30,7 @@ internal sealed class RewriteWindow : Window
     {
         this.controller = controller; this.target = target; this.scope = scope; this.skill = skill;
         preferences = controller.Preferences; source = target.Original[scope.Start..scope.End];
+        snapshot = new(preferences, controller.Lexicon, skill);
         Title = "DeAI — " + Ui.L("AI 改写", "AI rewrite");
         body = Ui.Panel(this, Ui.RewriteWidth);
         ShowActivated = true;
@@ -52,8 +54,9 @@ internal sealed class RewriteWindow : Window
         apply = Ui.Button(Ui.L("替换", "Replace"), async () =>
         {
             if (requesting || applying) return;
+            try { ValidateSnapshot(); } catch (Exception error) { Ui.Error(error); return; }
             applying = true; RefreshActions(true);
-            if (await controller.Apply(target, scope.Start, scope.End, output.Text)) Close();
+            if (await controller.Apply(target, scope.Start, scope.End, output.Text, ValidateSnapshot)) Close();
             else { applying = false; RefreshActions(); }
         }, "AcceptRewrite", "PrimaryButton");
         copy = Ui.Button(Ui.L("复制", "Copy"), () => { if (output.Text.Length > 0) Clipboard.SetText(output.Text); }, "CopyRewrite");
@@ -77,12 +80,13 @@ internal sealed class RewriteWindow : Window
         try
         {
             await controller.ValidateTarget(target);
-            if (preferences.Provider != controller.Preferences.Provider || preferences.ActiveProviderId != controller.Preferences.ActiveProviderId) throw new InvalidOperationException(Ui.L("服务配置已变化，请重新打开改写窗口。", "Provider changed. Reopen the rewrite panel."));
+            ValidateSnapshot();
             var key = controller.Secrets.Read();
             if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException(Ui.L("请先在设置中保存 API Key。", "Save an API key in Settings first."));
             using var client = new RewriteClient();
-            var result = await client.RewriteAsync(preferences.Provider, key, source, skill, controller.Lexicon, cancellation.Token);
+            var result = await client.RewriteAsync(preferences.Provider, key, source, skill, snapshot.Lexicon, cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
+            ValidateSnapshot();
             output.Text = result; output.Visibility = Visibility.Visible;
             status.Text = result == source ? Ui.L("原文已很自然，无需改写。", "Already natural. No changes needed.")
                 : target.CanWrite ? Ui.L("确认后将再次校验原文并替换。", "Replace rechecks the original before writing.")
@@ -106,6 +110,12 @@ internal sealed class RewriteWindow : Window
         apply.IsEnabled = !allDisabled && !requesting && target.CanWrite;
         copy.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed; copy.IsEnabled = !allDisabled && !requesting;
         retry.Visibility = requested ? Visibility.Visible : Visibility.Collapsed; retry.IsEnabled = !allDisabled && !requesting;
+    }
+    private void ValidateSnapshot()
+    {
+        var language = SkillStore.LanguageOf(source);
+        var currentSkill = SkillStore.Resolve(controller.Skills.Load(), language == "zh" ? controller.Preferences.ChineseSkill : controller.Preferences.EnglishSkill, language);
+        snapshot.Validate(controller.Preferences, controller.Lexicon, currentSkill);
     }
     private void BuildRemember(string result)
     {

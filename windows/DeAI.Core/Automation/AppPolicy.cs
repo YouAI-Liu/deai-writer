@@ -6,6 +6,7 @@ namespace DeAI.Automation;
 
 public static class AppPolicy
 {
+    internal static bool IsBrowser(string process) => Browsers.Contains(process);
     private static readonly HashSet<string> Sensitive = new(StringComparer.OrdinalIgnoreCase)
     {
         "DeAI", "DeAI.App", "WindowsTerminal", "cmd", "powershell", "pwsh", "conhost",
