@@ -119,6 +119,21 @@ final class AXElement: @unchecked Sendable {
         (attribute(kAXParentAttribute) as AXUIElement?).map(AXElement.init)
     }
 
+    var containingWindow: AXElement? {
+        if let window: AXUIElement = attribute(kAXWindowAttribute) { return AXElement(window) }
+        var current: AXElement? = self
+        for _ in 0..<20 {
+            guard let node = current else { break }
+            if node.role == kAXWindowRole { return node }
+            current = node.parent
+        }
+        return nil
+    }
+
+    var sharedTextElements: [AXElement] {
+        (attribute("AXSharedTextUIElements") as [AXUIElement]?)?.map(AXElement.init) ?? []
+    }
+
     /// The on-screen text viewport: nearest AXScrollArea ancestor frame ∩
     /// `windowFrame`, all in AX top-left screen coordinates. Word pages keep
     /// reporting bounds for off-viewport text (BUG-08), so glyph rects must

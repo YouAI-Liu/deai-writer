@@ -112,6 +112,7 @@ struct MenuContent: View {
     #endif
     @ObservedObject var controller: AppController
     @ObservedObject var settings: AppSettings
+    @ObservedObject var appPauses: AppPauseStore
     @Environment(\.openWindow) private var openWindow
     @State private var groupsExpanded: Bool
 
@@ -121,6 +122,7 @@ struct MenuContent: View {
     ) {
         self.controller = controller
         _settings = ObservedObject(wrappedValue: settings ?? controller.settings)
+        _appPauses = ObservedObject(wrappedValue: controller.appPauses)
         _groupsExpanded = State(initialValue: groupsExpanded)
     }
 
@@ -149,6 +151,21 @@ struct MenuContent: View {
                     Text(L10n.f(.menuCheckInApp, lang, appName(bundleId))).lineLimit(2)
                 }
                 .toggleStyle(DeAIToggleStyle())
+                if settings.isAppEnabled(bundleId) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let deadline = appPauses.deadline(for: bundleId) {
+                            Text(L10n.f(.menuPausedUntil, lang,
+                                        deadline.formatted(date: .omitted, time: .shortened)))
+                                .font(DeAIDesign.font(10)).foregroundStyle(DeAIDesign.muted)
+                            menuButton(L10n.t(.menuResumeApp, lang)) { controller.resumeCurrentApp(expectedBundleId: bundleId) }
+                            Text(L10n.t(.menuPauseCaption, lang))
+                                .font(DeAIDesign.font(10)).foregroundStyle(DeAIDesign.muted)
+                        } else {
+                            menuButton(L10n.t(.menuPauseApp, lang)) { controller.pauseCurrentApp(expectedBundleId: bundleId) }
+                        }
+                    }
+                    .padding(.leading, 8)
+                }
             }
             Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
             // BUG-03: a SwiftUI Menu renders as a system pop-up button with

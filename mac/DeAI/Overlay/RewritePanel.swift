@@ -12,8 +12,10 @@ final class RewritePanelModel: ObservableObject {
     }
 
     @Published var phase: Phase = .loading
-    @Published var original = ""
-    @Published var result = ""
+    @Published var original = "" { didSet { if !RewriteReview.identical(original, oldValue) { clearReview() } } }
+    @Published var result = "" { didSet { if !RewriteReview.identical(result, oldValue) { clearReview() } } }
+    @Published private(set) var review: RewriteReview?
+    @Published private(set) var acceptedEdits: Set<Int> = []
     @Published var errorMessage = ""
     /// UI language — pushed by the controller / capture fixture so an open
     /// panel re-renders live on a settings change.
@@ -38,6 +40,61 @@ final class RewritePanelModel: ObservableObject {
     var onOpenSettings: () -> Void = {}
     /// Checked `Pair`s the user wants as replace lexicon entries.
     var onAddLexiconPairs: ([RewriteDiff.Pair]) -> Void = { _ in }
+    var onReviewChanged: () -> Void = {}
+
+    /// Nil means the review belongs to an old original/result and cannot be used.
+    var reviewedText: String? {
+        guard let review, RewriteReview.identical(review.original, original),
+              RewriteReview.identical(review.result, result) else { return nil }
+        return review.text(accepting: acceptedEdits)
+    }
+
+    var keepsOriginal: Bool {
+        reviewedText.map { RewriteReview.identical($0, original) } ?? false
+    }
+
+    func setResult(_ result: String) {
+        self.result = result
+        let review = RewriteReview(original: original, result: result)
+        self.review = review
+        acceptedEdits = Set(review.edits.map(\.id))
+        refreshRememberPairs()
+        onReviewChanged()
+    }
+
+    func selectEdit(_ id: Int, accepted: Bool, reviewID: UUID) {
+        guard let review, review.id == reviewID, review.edits.indices.contains(id),
+              reviewedText != nil else { return }
+        if accepted { acceptedEdits.insert(id) } else { acceptedEdits.remove(id) }
+        refreshRememberPairs()
+        onReviewChanged()
+    }
+
+    func selectAllEdits(accepted: Bool) {
+        guard let review, reviewedText != nil else { return }
+        acceptedEdits = accepted ? Set(review.edits.map(\.id)) : []
+        refreshRememberPairs()
+        onReviewChanged()
+    }
+
+    func clearReview() {
+        review = nil
+        acceptedEdits = []
+        rememberPairs = []
+        rememberChecked = []
+        rememberSaved = false
+    }
+
+    private func refreshRememberPairs() {
+        if let text = reviewedText, !RewriteReview.identical(original, text),
+           review?.isWholePassage != true, original.count * text.count <= 4_000_000 {
+            rememberPairs = RewriteDiff.wordPairs(original: original, result: text)
+        } else {
+            rememberPairs = []
+        }
+        rememberChecked = Set(rememberPairs.indices)
+        rememberSaved = false
+    }
 }
 
 /// Non-activating borderless panel for the AI rewrite flow — same
@@ -216,11 +273,12 @@ struct RewritePanelView: View {
                     Button(L10n.t(.cancelButton, lang)) { model.onCancel() }
                 }
             case .result:
-                labeled(L10n.t(.originalLabel, lang), text: model.original, muted: true)
+                labeled(L10n.t(.originalLabel, lang), text: model.original, muted: true, maxHeight: 70)
                 Rectangle().fill(DeAIDesign.border).frame(height: 0.5)
-                labeled(L10n.t(.rewriteLabel, lang), text: model.result, muted: false)
+                if let review = model.review { reviewBlock(review) }
+                labeled(L10n.t(.reviewPreview, lang), text: model.reviewedText ?? model.result, muted: false, reviewPreview: true)
                 switch RewriteDiff.rememberSection(
-                    changed: model.result != model.original,
+                    changed: model.reviewedText != nil && !model.keepsOriginal,
                     pairs: model.rememberPairs
                 ) {
                 case .list:
@@ -234,15 +292,17 @@ struct RewritePanelView: View {
                     EmptyView()
                 }
                 HStack(spacing: 16) {
-                    Button(L10n.t(.replaceButton, lang)) { model.onAccept() }
+                    Button(L10n.t(model.keepsOriginal ? .reviewDone : .replaceButton, lang)) { model.onAccept() }
                         .keyboardShortcut(.defaultAction)
                         .buttonStyle(DeAIButtonStyle(compact: true))
+                        .disabled(model.reviewedText == nil)
                     Button(L10n.t(.copyButton, lang)) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(
-                            model.result, forType: .string
+                            model.reviewedText ?? "", forType: .string
                         )
                     }
+                    .disabled(model.reviewedText == nil)
                     Button(L10n.t(.retryButton, lang)) { model.onRetry() }
                     Spacer(minLength: 0)
                     Button(L10n.t(.cancelButton, lang)) { model.onCancel() }
@@ -296,6 +356,59 @@ struct RewritePanelView: View {
         .onExitCommand { model.onCancel() }
     }
 
+    private func reviewBlock(_ review: RewriteReview) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(L10n.f(.reviewCount, lang, review.edits.count, model.acceptedEdits.count))
+                    .font(DeAIDesign.font(11, weight: .medium))
+                Spacer()
+                Button(L10n.t(.reviewUseAll, lang)) { model.selectAllEdits(accepted: true) }
+                Button(L10n.t(.reviewKeepAll, lang)) { model.selectAllEdits(accepted: false) }
+            }
+            .buttonStyle(.plain)
+            .font(DeAIDesign.font(10))
+            Text(L10n.t(review.isWholePassage ? .reviewWholePassage : .reviewCaption, lang))
+                .font(DeAIDesign.font(10)).foregroundStyle(DeAIDesign.muted)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(review.edits) { edit in
+                        Toggle(isOn: Binding(
+                            get: { model.acceptedEdits.contains(edit.id) },
+                            set: { model.selectEdit(edit.id, accepted: $0, reviewID: review.id) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(editText(edit.original, empty: .reviewAdded))
+                                    .strikethrough(model.acceptedEdits.contains(edit.id))
+                                    .foregroundStyle(DeAIDesign.muted)
+                                Text(editText(edit.revised, empty: .reviewDeleted))
+                                    .foregroundStyle(model.acceptedEdits.contains(edit.id)
+                                                     ? DeAIDesign.accent : DeAIDesign.muted)
+                            }
+                            .font(DeAIDesign.font(11)).lineLimit(3)
+                            .help(edit.original + " → " + edit.revised)
+                        }
+                        .toggleStyle(DeAIToggleStyle())
+                        .accessibilityLabel(L10n.f(.reviewChangeA11y, lang,
+                                                  editText(edit.original, empty: .reviewAdded),
+                                                  editText(edit.revised, empty: .reviewDeleted)))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: min(140, CGFloat(review.edits.count) * 62))
+        }
+        .padding(10)
+        .background(DeAIDesign.sidebar, in: RoundedRectangle(cornerRadius: DeAIDesign.controlRadius))
+    }
+
+    private func editText(_ text: String, empty: L10n.Key) -> String {
+        if text.isEmpty { return L10n.t(empty, lang) }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return L10n.t(.reviewWhitespace, lang)
+        }
+        return text
+    }
+
     /// 记住改法: expands to the word-level changed pairs as checkboxes;
     /// 加入词库 stores the checked ones as replace lexicon entries.
     private var rememberBlock: some View {
@@ -323,7 +436,8 @@ struct RewritePanelView: View {
             .accessibilityLabel(L10n.t(.rememberA11y, lang))
 
             if model.rememberExpanded && !model.rememberSaved {
-                VStack(alignment: .leading, spacing: 6) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
                     ForEach(model.rememberPairs.indices, id: \.self) { i in
                         let pair = model.rememberPairs[i]
                         Toggle(
@@ -360,7 +474,9 @@ struct RewritePanelView: View {
                         .disabled(model.rememberChecked.isEmpty)
                         .opacity(model.rememberChecked.isEmpty ? 0.4 : 1)
                     }
+                    }
                 }
+                .frame(height: min(150, CGFloat(model.rememberPairs.count) * 28 + 44))
                 .padding(10)
                 .background(
                     DeAIDesign.sidebar,
@@ -370,13 +486,28 @@ struct RewritePanelView: View {
         }
     }
 
-    private func labeled(_ label: String, text: String, muted: Bool) -> some View {
+    private var previewText: Text {
+        guard let review = model.review, model.reviewedText != nil else { return Text(model.result) }
+        return review.segments.reduce(Text("")) { text, segment in
+            switch segment {
+            case let .unchanged(value): return text + Text(value)
+            case let .edit(edit):
+                if model.acceptedEdits.contains(edit.id) {
+                    return text + Text(edit.revised).foregroundColor(DeAIDesign.accent).underline()
+                }
+                return text + Text(edit.original)
+            }
+        }
+    }
+
+    private func labeled(_ label: String, text: String, muted: Bool, maxHeight: CGFloat = 160,
+                         reviewPreview: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(DeAIDesign.font(10))
                 .foregroundStyle(DeAIDesign.muted)
             ScrollView {
-                Text(text)
+                (reviewPreview ? previewText : Text(text))
                     .font(DeAIDesign.font(13))
                     .foregroundStyle(muted ? DeAIDesign.secondaryText : DeAIDesign.text)
                     .textSelection(.enabled)
@@ -384,7 +515,7 @@ struct RewritePanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.vertical, 2)
             }
-            .frame(height: Self.textViewportHeight(text))
+            .frame(height: min(maxHeight, Self.textViewportHeight(text)))
         }
         .fixedSize(horizontal: false, vertical: true)
     }

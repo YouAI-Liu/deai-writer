@@ -25,6 +25,10 @@ enum TextReplacer {
 
     private static var applyGate = ApplyGate()
 
+    static func shouldRestoreClipboard(ownedChangeCount: Int?, currentChangeCount: Int) -> Bool {
+        ownedChangeCount == currentChangeCount
+    }
+
     /// Temporary BUG-01 diagnostics: appended when `deai.debugStatePath` is set.
     static func dbgLog(_ s: String) {
         guard let base = UserDefaults.standard.string(forKey: "deai.debugStatePath")
@@ -102,19 +106,8 @@ enum TextReplacer {
             return .fallbackToPasteboard
         }
         guard setOK else { return .failNoPaste }
-        let expected = expectedText(current, start: start, end: end, replacement: replacement)
-        if after == expected { return .success }
-        // Host may normalize (e.g. Word CR/LF, trailing paragraph mark) — the
-        // write counts if the replacement now sits at [start, start+len).
-        if !replacement.isEmpty,
-           isFresh(
-               text: after,
-               start: start,
-               end: start + replacement.utf16.count,
-               matched: replacement
-           ) {
-            return .success
-        }
+        if pasteVerified(current: current, after: after, start: start, end: end,
+                         replacement: replacement) { return .success }
         return .failNoPaste
     }
 
@@ -132,14 +125,16 @@ enum TextReplacer {
     /// the caller to act on.
     static func applyViaAX(
         element: AXElement, start: Int, end: Int,
-        matched: String, replacement: String, baseOffset: Int = 0
+        matched: String, replacement: String, baseOffset: Int = 0,
+        identity: TextDocumentIdentity? = nil, expectedBaseline: String? = nil
     ) -> AXAttempt? {
         dbgLog("applyViaAX enter start=\(start) end=\(end) base=\(baseOffset) repl=\(replacement)")
         // freshness: re-read current value
-        guard let current = element.stringValue else {
+        guard let current = TextDocument.read(element) else {
             return AXAttempt(decision: .failNoPaste, baseline: "")
         }
-        guard isFresh(text: current, start: start, end: end, matched: matched) else {
+        guard expectedBaseline.map({ $0 == current }) ?? true,
+              isFresh(text: current, start: start, end: end, matched: matched) else {
             dbgLog("applyViaAX abort: not fresh")
             return nil
         }
@@ -149,8 +144,12 @@ enum TextReplacer {
             dbgLog("applyViaAX selRange set failed")
             return AXAttempt(decision: .failNoPaste, baseline: current)
         }
+        guard (identity ?? TextDocumentIdentity(element: element)).isCurrent(),
+              let selected = element.selectedTextRange,
+              selected.location == baseOffset + start, selected.length == end - start,
+              TextDocument.read(element) == current else { return nil }
         let setOK = element.setSelectedText(replacement)
-        let after = element.stringValue ?? current
+        let after = TextDocument.read(element) ?? current
         dbgLog("applyViaAX setOK=\(setOK) after==current:\(after == current)")
         return AXAttempt(
             decision: decide(
@@ -200,13 +199,8 @@ enum TextReplacer {
             }
             return tailA.elementsEqual(tailB)
         }
-        // deletion: length shrank by exactly (end - start) and everything
-        // before `start` is untouched
-        let u16After = Array(after.utf16)
-        let u16Before = Array(current.utf16)
-        guard u16After.count == u16Before.count - (end - start),
-              start <= u16After.count else { return false }
-        return u16After[..<start].elementsEqual(u16Before[..<start])
+        // Deletion must match the exact expected document (checked above).
+        return false
     }
 
     /// What the pre-paste settle check concluded about `text` (the element's
@@ -238,10 +232,7 @@ enum TextReplacer {
         if text == baseline { return .paste }
         if text == expectedText(
             baseline, start: start, end: end, replacement: replacement
-        ) || (!replacement.isEmpty && isFresh(
-            text: text, start: start,
-            end: start + replacement.utf16.count, matched: replacement
-        )) {
+        ) {
             return .alreadyApplied
         }
         return .abort
@@ -337,16 +328,67 @@ enum TextReplacer {
     /// re-reading the element's text (poll every 50 ms, up to 600 ms);
     /// the clipboard is restored after verification, but not before 300 ms
     /// have elapsed since the paste.
+    struct PasteboardAccess {
+        var readText: () -> String?
+        var selectedRange: () -> CFRange?
+        var select: (CFRange) -> Bool
+        var isCurrent: () -> Bool
+        var prepareCommand: (_ deleting: Bool) -> (() -> Bool)
+        var pasteboard: NSPasteboard
+    }
+
     static func applyViaPasteboard(
         element: AXElement, start: Int, end: Int,
         matched: String, replacement: String,
         baseline: String, baseOffset: Int = 0,
         useMenuCommands: Bool = false,
+        identity: TextDocumentIdentity? = nil,
         completion: @escaping (Bool) -> Void
     ) {
+        let identity = identity ?? TextDocumentIdentity(element: element)
+        let access = PasteboardAccess(
+            readText: { TextDocument.read(element) },
+            selectedRange: { element.selectedTextRange },
+            select: { element.setSelectedTextRange($0) },
+            isCurrent: { identity.isCurrent() },
+            prepareCommand: { deleting in
+                if useMenuCommands, !deleting, let pid = element.pid,
+                   let item = menuCommandItem(pid: pid, cmdChar: "V") {
+                    // A failed AXPress has an uncertain outcome; never follow it
+                    // with another paste that could duplicate the replacement.
+                    return { item.press() }
+                }
+                return {
+                    let src = CGEventSource(stateID: .combinedSessionState)
+                    let code: CGKeyCode = deleting ? 51 : 9
+                    guard let down = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: true),
+                          let up = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: false)
+                    else { return false }
+                    if !deleting { down.flags = .maskCommand; up.flags = .maskCommand }
+                    down.post(tap: .cgSessionEventTap)
+                    up.post(tap: .cgSessionEventTap)
+                    return true
+                }
+            },
+            pasteboard: .general
+        )
+        applyViaPasteboard(
+            access: access, start: start, end: end, matched: matched,
+            replacement: replacement, baseline: baseline, baseOffset: baseOffset,
+            useMenuCommands: useMenuCommands, completion: completion
+        )
+    }
+
+    static func applyViaPasteboard(
+        access: PasteboardAccess, start: Int, end: Int,
+        matched: String, replacement: String,
+        baseline: String, baseOffset: Int = 0,
+        useMenuCommands: Bool = false,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard access.isCurrent() else { completion(false); return }
         var start = start, end = end
         var matched = matched, replacement = replacement
-        var useMenuCommands = useMenuCommands
         if useMenuCommands && replacement.isEmpty {
             // Word Cut is a no-op on page-element selections — express the
             // deletion as a replacement over an extended range instead.
@@ -362,13 +404,12 @@ enum TextReplacer {
                 start = ext.start; end = ext.end; replacement = ext.replacement
             } else {
                 dbgLog("Word deletion: no usable neighbour — key-event delete")
-                useMenuCommands = false
             }
         }
         dbgLog("applyViaPasteboard enter start=\(start) end=\(end) base=\(baseOffset)")
         let wanted = CFRange(location: baseOffset + start, length: end - start)
-        guard element.setSelectedTextRange(wanted),
-              let got = element.selectedTextRange,
+        guard access.select(wanted),
+              let got = access.selectedRange(),
               got.location == wanted.location, got.length == wanted.length
         else {
             dbgLog("pasteboard: selection not on wanted range")
@@ -383,7 +424,7 @@ enum TextReplacer {
         // text is still exactly the baseline seen before the AX write.
         var settleAttempts = 0
         func settle() {
-            guard let before = element.stringValue else {
+            guard let before = access.readText() else {
                 completion(false)
                 return
             }
@@ -409,10 +450,20 @@ enum TextReplacer {
             }
         }
         func paste(before: String) {
+            // AX menu traversal can take time: resolve it before the final guard.
+            let command = access.prepareCommand(replacement.isEmpty)
+            func canWrite() -> Bool {
+                guard access.readText() == before, access.isCurrent(),
+                      let selected = access.selectedRange(),
+                      selected.location == wanted.location, selected.length == wanted.length
+                else { return false }
+                return true
+            }
+            guard canWrite() else { completion(false); return }
             let t0 = CFAbsoluteTimeGetCurrent()
-            dbgContext(element)
 
-            let pb = NSPasteboard.general
+            let pb = access.pasteboard
+            let originalChangeCount = pb.changeCount
             // save every item with all its types (one item each, preserving
             // order); skipped only by the key-delete path — the menu path
             // always has a non-empty replacement by now (Word deletions
@@ -432,53 +483,38 @@ enum TextReplacer {
                 saved = entries
             }
 
-            var mechanism = "keyEvent"
-            var pasteboardSet = false
-            if useMenuCommands, let pid = element.pid {
+            guard pb.changeCount == originalChangeCount, canWrite() else {
+                completion(false)
+                return
+            }
+            var ownedChangeCount: Int?
+            if !replacement.isEmpty {
                 pb.clearContents()
-                pb.setString(replacement, forType: .string)
-                pasteboardSet = true
-                let item = menuCommandItem(pid: pid, cmdChar: "V")
-                if item?.press() == true {
-                    mechanism = "menuPaste"
-                } else {
-                    dbgLog(
-                        "pasteboard: menu command "
-                        + (item == nil ? "not found" : "AXPress failed")
-                        + " — key-event fallback"
-                    )
+                guard pb.setString(replacement, forType: .string) else {
+                    ownedChangeCount = pb.changeCount
+                    restoreClipboard { completion(false) }
+                    return
                 }
+                ownedChangeCount = pb.changeCount
             }
-            if mechanism == "keyEvent" {
-                let src = CGEventSource(stateID: .combinedSessionState)
-                if !replacement.isEmpty {
-                    if !pasteboardSet {
-                        pb.clearContents()
-                        pb.setString(replacement, forType: .string)
-                    }
-                    let vCode: CGKeyCode = 9 // kVK_ANSI_V
-                    let down = CGEvent(keyboardEventSource: src, virtualKey: vCode, keyDown: true)
-                    let up = CGEvent(keyboardEventSource: src, virtualKey: vCode, keyDown: false)
-                    down?.flags = .maskCommand
-                    up?.flags = .maskCommand
-                    down?.post(tap: .cgSessionEventTap)
-                    up?.post(tap: .cgSessionEventTap)
-                    dbgLog("pasteboard: Cmd+V posted")
-                } else {
-                    let del: CGKeyCode = 51 // kVK_Delete — forward delete selection
-                    let down = CGEvent(keyboardEventSource: src, virtualKey: del, keyDown: true)
-                    let up = CGEvent(keyboardEventSource: src, virtualKey: del, keyDown: false)
-                    down?.post(tap: .cgSessionEventTap)
-                    up?.post(tap: .cgSessionEventTap)
-                }
+            guard canWrite(), replacement.isEmpty || ownedChangeCount == pb.changeCount else {
+                restoreClipboard { completion(false) }
+                return
             }
-            dbgLog("pasteboard: mechanism=\(mechanism)")
+            guard command() else {
+                restoreClipboard { completion(false) }
+                return
+            }
 
-            func restoreClipboard() {
-                guard let saved else { return }
+            func restoreClipboard(_ done: @escaping () -> Void) {
+                guard let saved else { done(); return }
                 // restore no earlier than 300 ms after posting the paste
                 let wait = max(0, 0.3 - (CFAbsoluteTimeGetCurrent() - t0))
                 DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                    defer { done() }
+                    guard shouldRestoreClipboard(
+                        ownedChangeCount: ownedChangeCount, currentChangeCount: pb.changeCount
+                    ) else { return }
                     pb.clearContents()
                     let items = saved.map { entry -> NSPasteboardItem in
                         let item = NSPasteboardItem()
@@ -496,14 +532,14 @@ enum TextReplacer {
             var lastSnippet = ""
             func snippet(_ text: String) -> String {
                 let u = Array(text.utf16)
-                let lo = max(0, start - 20)
+                let lo = min(u.count, max(0, start - 20))
                 let hi = min(u.count, end + 20)
                 return String(decoding: u[lo..<hi], as: UTF16.self)
                     .replacingOccurrences(of: "\r", with: "␍")
                     .replacingOccurrences(of: "\n", with: "⏎")
             }
             func poll(_ deadline: CFAbsoluteTime) {
-                if let after = element.stringValue {
+                if let after = access.readText() {
                     let s = snippet(after)
                     if s != lastSnippet {
                         lastSnippet = s
@@ -517,15 +553,13 @@ enum TextReplacer {
                         start: start, end: end, replacement: replacement
                     ) {
                         dbgLog("pasteboard: verified ok")
-                        restoreClipboard()
-                        completion(true)
+                        restoreClipboard { completion(true) }
                         return
                     }
                 }
                 if CFAbsoluteTimeGetCurrent() >= deadline {
                     dbgLog("pasteboard: deadline reached unverified")
-                    restoreClipboard()
-                    completion(false)
+                    restoreClipboard { completion(false) }
                     return
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -548,8 +582,16 @@ enum TextReplacer {
         element: AXElement, start: Int, end: Int,
         matched: String, replacement: String,
         baseOffset: Int = 0, label: String, log: Logger,
+        identity: TextDocumentIdentity? = nil, expectedBaseline: String? = nil,
         completion: @escaping (Result) -> Void
     ) {
+        let identity = identity ?? TextDocumentIdentity(element: element)
+        guard identity.isCurrent(),
+              let live = TextDocument.read(element),
+              expectedBaseline.map({ $0 == live }) ?? true else {
+            completion(Result(path: .aborted, success: false))
+            return
+        }
         // BUG-01: never let two writes into the same app overlap — a second
         // paste racing the first lands at the post-write caret. Keyed by pid
         // (not element identity): Word exposes one AXTextArea per page, all
@@ -570,7 +612,7 @@ enum TextReplacer {
         }
         if skipsAXWrite(bundleId: bundleId) {
             // freshness on the live value, then straight to pasteboard
-            guard let current = element.stringValue,
+            guard let current = TextDocument.read(element), current == live,
                   isFresh(text: current, start: start, end: end, matched: matched)
             else {
                 log.notice("replacement aborted (text changed/unreadable): \(label)")
@@ -582,7 +624,7 @@ enum TextReplacer {
                 element: element, start: start, end: end,
                 matched: matched, replacement: replacement,
                 baseline: current, baseOffset: baseOffset,
-                useMenuCommands: true
+                useMenuCommands: true, identity: identity
             ) { ok in
                 log.info("replaced via \(replacement.isEmpty ? "delete-key" : "pasteboard") (\(ok ? "verified" : "unverified")): \(label)")
                 finish(Result(path: .pasteboard, success: ok))
@@ -591,7 +633,8 @@ enum TextReplacer {
         }
         guard let attempt = applyViaAX(
             element: element, start: start, end: end,
-            matched: matched, replacement: replacement, baseOffset: baseOffset
+            matched: matched, replacement: replacement, baseOffset: baseOffset,
+            identity: identity, expectedBaseline: live
         ) else {
             log.notice("replacement aborted (text changed): \(label)")
             finish(Result(path: .aborted, success: false))
@@ -608,7 +651,7 @@ enum TextReplacer {
             applyViaPasteboard(
                 element: element, start: start, end: end,
                 matched: matched, replacement: replacement,
-                baseline: attempt.baseline, baseOffset: baseOffset
+                baseline: attempt.baseline, baseOffset: baseOffset, identity: identity
             ) { ok in
                 log.info("replaced via \(replacement.isEmpty ? "delete-key" : "pasteboard") (\(ok ? "verified" : "unverified")): \(label)")
                 finish(Result(path: .pasteboard, success: ok))
@@ -620,6 +663,7 @@ enum TextReplacer {
     static func apply(
         element: AXElement, finding: Finding, replacement: String,
         matched: String, baseOffset: Int = 0, log: Logger,
+        identity: TextDocumentIdentity? = nil, expectedBaseline: String? = nil,
         completion: @escaping (Result) -> Void
     ) {
         apply(
@@ -627,6 +671,7 @@ enum TextReplacer {
             start: Int(finding.start), end: Int(finding.end),
             matched: matched, replacement: replacement,
             baseOffset: baseOffset, label: finding.ruleId, log: log,
+            identity: identity, expectedBaseline: expectedBaseline,
             completion: completion
         )
     }

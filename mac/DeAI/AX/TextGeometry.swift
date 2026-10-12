@@ -5,9 +5,22 @@ import CoreGraphics
 struct PositionedFinding {
     let finding: Finding
     let rects: [CGRect]
+    var targetKey: UInt64 = 0
+
+    func belongs(to key: UInt64) -> Bool { targetKey == key }
+    func sameTargetAndFinding(as other: PositionedFinding) -> Bool {
+        targetKey == other.targetKey && finding.ruleId == other.finding.ruleId
+            && finding.start == other.finding.start && finding.end == other.finding.end
+    }
 }
 
 enum TextGeometry {
+    static func clippedRange(_ range: CFRange, to page: CFRange) -> CFRange {
+        let start = max(range.location, page.location)
+        let end = min(range.location + range.length, page.location + page.length)
+        return CFRange(location: start, length: max(0, end - start))
+    }
+
     /// AX uses a top-left origin at the primary screen; Cocoa uses bottom-left.
     /// `primaryMaxY` = `NSScreen.screens[0].frame.maxY`.
     static func axToCocoa(_ axRect: CGRect, primaryMaxY: CGFloat) -> CGRect {
@@ -147,12 +160,14 @@ enum TextGeometry {
         maxFindings: Int = 300
     ) -> [PositionedFinding] {
         let localLen = element.ownTextLength ?? 0
-        let visible: CFRange = element.visibleCharacterRange
+        let page = element.sharedCharacterRange
             ?? CFRange(location: baseOffset, length: localLen)
+        let visible = clippedRange(element.visibleCharacterRange ?? page, to: page)
         let elementFrame = element.frame
 
         var out: [PositionedFinding] = []
-        for f in findings.prefix(maxFindings) {
+        for f in findings {
+            if out.count >= maxFindings { break }
             guard let span = globalSpan(
                 start: Int(f.start),
                 end: Int(f.end),
@@ -170,7 +185,9 @@ enum TextGeometry {
                 rangeForLine: { element.rangeForLine($0) }
             )
             if !rects.isEmpty {
-                out.append(PositionedFinding(finding: f, rects: rects))
+                out.append(PositionedFinding(
+                    finding: f, rects: rects, targetKey: UInt64(CFHash(element.raw))
+                ))
             }
         }
         return out

@@ -461,7 +461,7 @@ final class DebugUICapture {
             show(rewriteStage(rewriteModel), size: NSSize(width: 620, height: 420))
             try await save("rewrite-loading")
             rewriteModel.phase = .result
-            rewriteModel.result = "这一段开头直接说重点。"
+            rewriteModel.setResult("这一段开头直接说重点。")
             try await save("rewrite-result")
             // 记住改法 expanded: checkbox list of word-level changed pairs
             rewriteModel.rememberPairs = RewriteDiff.wordPairs(

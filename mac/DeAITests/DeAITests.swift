@@ -184,9 +184,11 @@ final class CloudQAViewTests: XCTestCase {
         let longView = host(RewritePanelView(model: model))
         let longScrolls = descendants(longView, of: NSScrollView.self)
         XCTAssertEqual(longScrolls.count, 2)
+        // The original pane is compact now that the review list sits between
+        // original and final text; both text panes must still scroll to the end.
+        XCTAssertEqual(longScrolls.map { $0.contentView.bounds.height.rounded() }.sorted(), [70, 160])
         for scroll in longScrolls {
             let document = try XCTUnwrap(scroll.documentView)
-            XCTAssertEqual(scroll.contentView.bounds.height, 160, accuracy: 1)
             XCTAssertGreaterThan(document.bounds.height, scroll.contentView.bounds.height)
             let bottom = document.bounds.height - scroll.contentView.bounds.height
             document.scroll(NSPoint(x: 0, y: bottom))
@@ -631,14 +633,13 @@ final class TextReplacerTests: XCTestCase {
         )
     }
 
-    /// deletion where the host normalized something after the span (e.g.
-    /// trailing paragraph mark) — length/prefix rule still accepts
-    func testPasteVerifiedDeletionTolerantSuffix() {
+    /// Equal length and unchanged prefix do not prove a correct deletion:
+    /// an unrelated edit in the tail must fail verification.
+    func testPasteVerifiedDeletionRejectsChangedSuffix() {
         let current = "第一段。说白了，下一段。"
-        // prefix unchanged, exactly (end-start) fewer units; suffix differs
-        // only AFTER the deleted span — tolerated per spec predicate
+        // This changes 下一段 into 下段段; it is not newline normalization.
         let after = "第一段。下段段。"
-        XCTAssertTrue(
+        XCTAssertFalse(
             TextReplacer.pasteVerified(
                 current: current, after: after,
                 start: 4, end: 8, replacement: ""

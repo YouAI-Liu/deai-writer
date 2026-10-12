@@ -14,6 +14,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private let log = Logger(subsystem: "com.local.deai", category: "overlay")
 
     let settings = AppSettings()
+    let appPauses = AppPauseStore()
 
     /// Bundle id of the app we are currently tracking (for menu labels).
     @Published private(set) var frontmostBundleId: String?
@@ -30,6 +31,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     /// What the rewrite panel is operating on. Holds the element itself —
     /// Word page keys (CFHash) change on scroll, so never re-derive it.
     private struct RewriteContext {
+        let id = UUID()
+        let identity: TextDocumentIdentity
+        let baseline: String
         let element: AXElement
         let baseOffset: Int
         /// element-local UTF-16 scope
@@ -85,6 +89,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     /// the app/group is disabled or autoUnderline is off. Esc, an outside
     /// click, focus loss or an app switch ends it.
     private struct SelectionSession {
+        let id = UUID()
         /// CFHash tag of the element (matching `states` keys when tracked).
         let key: UInt64
         /// Holds the element itself — Word page keys change on scroll, so
@@ -120,7 +125,16 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     func start() {
         tracker.delegate = self
         tracker.shouldServe = { [weak self] bundleId in
-            self?.settings.isAppEnabled(bundleId) ?? true
+            guard let self else { return false }
+            return self.shouldCheckAutomatically(bundleId)
+        }
+        appPauses.onChange = { [weak self] changed in
+            guard let self else { return }
+            if let bundleId = self.currentAppBundleId, changed.contains(bundleId) {
+                if self.appPauses.deadline(for: bundleId) != nil { self.focusLost() }
+                self.tracker.refresh()
+            }
+            self.writeDebugState()
         }
         checkService.onResult = { [weak self] result in
             self?.checkFinished(result)
@@ -132,6 +146,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             self?.card.dismiss()
         }
         rewritePanel.model.onAccept = { [weak self] in self?.rewriteAccept() }
+        rewritePanel.model.onReviewChanged = { [weak self] in self?.writeDebugState() }
         rewritePanel.model.onRetry = { [weak self] in self?.runRewriteRequest() }
         rewritePanel.model.onCancel = { [weak self] in
             self?.rewritePanel.dismiss()
@@ -185,6 +200,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     func stop() {
+        appPauses.onChange = { _ in }
         tracker.stop()
         clickMonitor.stop()
         overlay.hideAll()
@@ -245,7 +261,21 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     // MARK: - FocusTrackerDelegate
 
     func focusTargetsChanged(_ newTargets: [TextTarget]) {
+        let newTargets = newTargets.filter { shouldCheckAutomatically($0.appBundleId) }
         frontmostBundleId = tracker.currentApp?.bundleIdentifier
+        if let ctx = rewriteContext, !ctx.identity.isCurrent(requireFocus: false) {
+            rewritePanel.dismiss()
+        }
+        if let session = selectionSession,
+           !session.target.identity.isCurrent(requireFocus: false) {
+            endSelectionSession()
+            card.dismiss()
+        }
+        if let context = cardContext,
+           states[context.key]?.target.identity.isCurrent(requireFocus: false) != true {
+            card.dismiss()
+            cardContext = nil
+        }
         // switching to another app closes the rewrite panel
         if let ctx = rewriteContext,
            ctx.bundleId != frontmostBundleId {
@@ -274,6 +304,12 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                 // re-resolve (e.g. after a scroll): refresh the element
                 // wrapper + baseOffset — text/findings carry over and the
                 // check cache dedupes when nothing changed
+                if !existing.target.identity.isCurrent(requireFocus: false) {
+                    checkService.invalidate(tag: key)
+                    existing.text = ""
+                    existing.findings = []
+                    existing.positioned = []
+                }
                 existing.target = t
                 states[key] = existing
                 scheduleCheck(key)
@@ -289,6 +325,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     func focusTextMayHaveChanged(_ target: TextTarget) {
+        guard shouldCheckAutomatically(target.appBundleId) else { return }
         let key = tag(for: target.element)
         guard states[key] != nil else {
             states[key] = TargetState(target: target)
@@ -298,9 +335,15 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         // Read the live value on main: caret/selection moves (which fire the
         // same AX notifications, e.g. after clicking an underline) must NOT
         // trigger a re-check — that would dismiss the card we just opened.
-        // A transient read failure defers to the background check instead of
-        // clearing underlines.
-        guard let current = target.element.stringValue else {
+        // Shared document read failure clears geometry rather than showing
+        // suggestions from a partial or outdated page snapshot.
+        guard let current = target.text else {
+            if target.appBundleId == "com.microsoft.Word" {
+                states[key]?.findings = []
+                states[key]?.positioned = []
+                card.dismiss()
+                render()
+            }
             scheduleCheck(key)
             return
         }
@@ -312,13 +355,20 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     func focusSelectionMayHaveChanged(_ target: TextTarget) {
+        guard shouldCheckAutomatically(target.appBundleId) else { return }
         let key = tag(for: target.element)
         guard states[key] != nil else {
             states[key] = TargetState(target: target)
             scheduleCheck(key)
             return
         }
-        guard let current = target.element.stringValue else {
+        guard let current = target.text else {
+            if target.appBundleId == "com.microsoft.Word" {
+                states[key]?.findings = []
+                states[key]?.positioned = []
+                card.dismiss()
+                render()
+            }
             scheduleCheck(key)
             return
         }
@@ -477,11 +527,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     // MARK: - checking pipeline
 
     private func scheduleCheck(_ key: UInt64, now: Bool = false) {
-        guard let state = states[key] else { return }
-        let element = state.target.element
+        guard let state = states[key], shouldCheckAutomatically(state.target.appBundleId) else { return }
+        let target = state.target
         let bundleId = state.target.appBundleId
         let snapshot = settings
-        let read: () -> String? = { element.stringValue }
+        let read: () -> String? = { target.text }
         if now {
             checkService.scheduleNow(tag: key, readText: read,
                                      settings: snapshot, bundleId: bundleId)
@@ -492,7 +542,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     }
 
     private func checkFinished(_ result: CheckService.Result) {
-        guard var state = states[result.tag] else { return }
+        guard var state = states[result.tag], shouldCheckAutomatically(state.target.appBundleId),
+              state.target.identity.isCurrent(requireFocus: false),
+              state.target.text == result.text else { return }
         state.text = result.text
         state.findings = result.findings
         state.readMs = result.readMs
@@ -553,12 +605,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         let winFrame = focusedWindowFrameAX()
         for key in states.keys {
             guard var state = states[key] else { continue }
-            // If the element's own live text length no longer matches the
-            // text we checked, the offsets are stale — draw nothing for this
-            // target rather than misplaced underlines. `ownTextLength` uses
-            // the shared-range length on sliced elements (Word pages) where
-            // AXNumberOfCharacters reports the whole document.
-            let liveLen = state.target.element.ownTextLength
+            // Compare content length (whole document for Word), independently
+            // of the page slice used to clip on-screen geometry.
+            let liveLen = state.target.textLength
             if let liveLen, liveLen != state.text.utf16.count {
                 state.positioned = []
                 states[key] = state
@@ -610,12 +659,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             writeDebugState()
             return
         }
-        var all = states.values.flatMap(\.positioned)
+        var all = states.values.filter { shouldCheckAutomatically($0.target.appBundleId) }
+            .flatMap(\.positioned)
         for item in sessionItems
         where !all.contains(where: {
-            $0.finding.ruleId == item.finding.ruleId
-                && $0.finding.start == item.finding.start
-                && $0.finding.end == item.finding.end
+            $0.sameTargetAndFinding(as: item)
         }) {
             all.append(item)
         }
@@ -628,14 +676,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     // MARK: - suggestion card + replacement
 
     private func state(for item: PositionedFinding) -> (key: UInt64, state: TargetState)? {
-        for (key, state) in states
-        where state.findings.contains(where: {
+        guard let state = states[item.targetKey], state.findings.contains(where: {
             $0.ruleId == item.finding.ruleId && $0.start == item.finding.start
                 && $0.end == item.finding.end
-        }) {
-            return (key, state)
-        }
-        return nil
+        }) else { return nil }
+        return (item.targetKey, state)
     }
 
     /// Underline click: inside a session, route to the session card (the
@@ -643,6 +688,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     /// no state for); otherwise the normal card path.
     private func underlineClicked(_ item: PositionedFinding, at rect: CGRect) {
         if var s = selectionSession,
+           s.positioned.contains(where: { $0.sameTargetAndFinding(as: item) }),
            let idx = s.findings.firstIndex(where: {
                $0.ruleId == item.finding.ruleId
                    && $0.start == item.finding.start
@@ -660,6 +706,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         // dedupe: mouse-monitor click AND caret trigger can both fire for one
         // click — don't reopen the same card
         if let ctx = cardContext,
+           ctx.key == item.targetKey,
            ctx.ruleId == item.finding.ruleId,
            ctx.start == item.finding.start,
            ctx.end == item.finding.end {
@@ -784,7 +831,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             replacement: replacement,
             matched: matched,
             baseOffset: state.target.baseOffset,
-            log: log
+            log: log, identity: state.target.identity, expectedBaseline: state.text
         ) { [weak self] result in
             // completion arrives after the write is verified (pasteboard and
             // delete-key paths poll the element's text; BUG-11)
@@ -823,7 +870,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private func startRewriteForFinding(
         key: UInt64, finding: Finding, anchor: CGRect
     ) {
-        guard let state = states[key] else { return }
+        guard let state = states[key], state.target.identity.isCurrent() else { return }
         card.dismiss()
         // collapsed selection at the finding start → enclosing paragraph
         let caret = CFRange(
@@ -843,7 +890,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             baseOffset: state.target.baseOffset,
             text: state.text, scope: scope,
             findings: state.findings,
-            anchor: anchor
+            anchor: anchor, identity: state.target.identity
         )
     }
 
@@ -863,8 +910,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         // Prefer an already-tracked element containing the selection.
         for (_, state) in states {
             guard let scope = selectionScope(
-                target: state.target,
-                fallbackText: state.text
+                target: state.target
             ) else { continue }
             startSelectionSession(target: state.target, scope: scope)
             return
@@ -874,7 +920,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         resolveSelectionTargets { [weak self] targets in
             guard let self else { return }
             for t in targets {
-                if let scope = self.selectionScope(target: t, fallbackText: nil) {
+                if let scope = self.selectionScope(target: t) {
                     self.startSelectionSession(target: t, scope: scope)
                     return
                 }
@@ -883,18 +929,16 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         }
     }
 
-    /// Compute the hotkey scope for a target from its live selection;
-    /// `fallbackText` is the tracked text, live-read when possible.
-    /// Returns nil when the element has no readable selection inside its
-    /// slice or the scope is empty/whitespace.
+    /// Compute the scope from live content only. Word content is a complete
+    /// document snapshot, even when the caret's geometry belongs to one page.
     private func selectionScope(
-        target: TextTarget, fallbackText: String?
+        target: TextTarget
     ) -> (start: Int, end: Int)? {
         guard let sel = target.element.selectedTextRange else { return nil }
         let base = target.baseOffset
-        let text = target.element.stringValue ?? fallbackText ?? ""
+        guard target.identity.isCurrent(), let text = target.text else { return nil }
         let len = text.utf16.count
-        // the selection must live inside this element's shared-text slice
+        // The whole selection must be covered by the content snapshot.
         guard sel.location >= base, sel.location <= base + len else {
             return nil
         }
@@ -924,7 +968,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private func startSelectionSession(
         target: TextTarget, scope: (start: Int, end: Int)
     ) {
-        guard let text = target.element.stringValue else {
+        guard let text = target.text else {
             NSSound.beep()
             return
         }
@@ -945,22 +989,32 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     /// session generation so out-of-order completions are dropped.
     private func runSelectionCheck() {
         guard var s = selectionSession else { return }
+        guard s.target.identity.isCurrent(), let live = s.target.text else {
+            endSelectionSession()
+            card.dismiss()
+            return
+        }
         s.generation += 1
         // fresh read on every (re)check — the text may have been replaced
-        if let live = s.target.element.stringValue {
-            s.text = live
-        }
+        s.text = live
         selectionSession = s
         let gen = s.generation
+        let sessionID = s.id
+        let checkedText = s.text
         checkService.checkNow(
             text: s.text, settings: settings, bundleId: s.bundleId
         ) { [weak self] findings in
-            self?.selectionCheckFinished(gen: gen, findings: findings)
+            self?.selectionCheckFinished(
+                sessionID: sessionID, gen: gen, checkedText: checkedText, findings: findings
+            )
         }
     }
 
-    private func selectionCheckFinished(gen: Int, findings: [Finding]) {
-        guard var s = selectionSession, s.generation == gen else { return }
+    private func selectionCheckFinished(
+        sessionID: UUID, gen: Int, checkedText: String, findings: [Finding]
+    ) {
+        guard var s = selectionSession, s.id == sessionID, s.generation == gen,
+              s.target.identity.isCurrent(), s.target.text == checkedText else { return }
         s.findings = SelectionSessionLogic.scoped(
             findings, scopeStart: s.scope.start, scopeEnd: s.scope.end
         )
@@ -1017,13 +1071,16 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private func repositionSession() {
         guard var s = selectionSession else { return }
         let winFrame = focusedWindowFrameAX()
-        s.positioned = TextGeometry.position(
-            findings: s.findings,
-            element: s.target.element,
-            primaryMaxY: primaryMaxY,
-            baseOffset: s.target.baseOffset,
-            viewportAX: s.target.element.viewportFrame(windowFrame: winFrame)
-        )
+        let pages = s.target.appBundleId == "com.microsoft.Word"
+            ? s.target.element.sharedTextElements : []
+        let elements = pages.isEmpty ? [s.target.element] : pages
+        s.positioned = elements.flatMap { element in
+            TextGeometry.position(
+                findings: s.findings, element: element,
+                primaryMaxY: primaryMaxY, baseOffset: s.target.baseOffset,
+                viewportAX: element.viewportFrame(windowFrame: winFrame)
+            )
+        }
         selectionSession = s
     }
 
@@ -1073,7 +1130,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     baseOffset: target.baseOffset,
                     text: text, scope: scope,
                     findings: sessionFindings,
-                    anchor: anchor
+                    anchor: anchor, identity: target.identity
                 )
             },
             onIgnore: { [weak self] in
@@ -1140,7 +1197,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     baseOffset: target.baseOffset,
                     text: text, scope: scope,
                     findings: [],
-                    anchor: anchor
+                    anchor: anchor, identity: target.identity
                 )
             },
             onDismiss: { [weak self] in self?.endSelectionSession() }
@@ -1171,10 +1228,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             replacement: replacement,
             matched: matched,
             baseOffset: s.target.baseOffset,
-            log: log
+            log: log, identity: s.target.identity, expectedBaseline: s.text
         ) { [weak self] result in
             completion(result.success)
-            guard let self, var s = self.selectionSession else { return }
+            guard let self, let current = self.selectionSession, current.id == s.id else { return }
+            var s = current
             if result.success {
                 // the scope tracks the edit so the re-check sees the whole
                 // (grown/shrunk) selection
@@ -1227,7 +1285,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         text: String,
         scope: (start: Int, end: Int),
         findings: [Finding],
-        anchor: CGRect
+        anchor: CGRect, identity: TextDocumentIdentity? = nil
     ) {
         // Close any open panel first: show() dismisses the previous panel,
         // whose onDismissed would clear the context we set below (RW-01).
@@ -1240,6 +1298,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             return
         }
         let units = Array(text.utf16)
+        guard scope.start >= 0, scope.start < scope.end, scope.end <= units.count else { return }
         let original = String(
             decoding: units[scope.start..<scope.end], as: UTF16.self
         )
@@ -1273,7 +1332,11 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     message: $0.message
                 )
             }
+        let identity = identity ?? TextDocumentIdentity(element: element)
+        guard identity.isCurrent(), TextDocument.read(element) == text,
+              scope.start >= 0, scope.end <= units.count else { return }
         rewriteContext = RewriteContext(
+            identity: identity, baseline: text,
             element: element,
             baseOffset: baseOffset,
             start: scope.start,
@@ -1306,6 +1369,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
               let provider = settings.activeProvider else { return }
         rewriteTask?.cancel()
         rewritePanel.model.phase = .loading
+        rewritePanel.model.clearReview()
         rewritePanel.update()
         rewriteDebug = (state: "loading", original: ctx.original,
                         result: "", error: "")
@@ -1331,11 +1395,14 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     system: systemPrompt,
                     user: user
                 )
+                guard !Task.isCancelled, self.rewriteContext?.id == ctx.id,
+                      ctx.identity.isCurrent(requireFocus: false) else { return }
                 let cleaned = LLMClient.cleanOutput(raw)
                 self.rewriteFinished(cleaned)
             } catch is CancellationError {
                 // dismissed while in flight — panel already closed
             } catch {
+                guard !Task.isCancelled, self.rewriteContext?.id == ctx.id else { return }
                 self.rewriteFailed(error.deaiMessage(self.settings.uiLanguage))
             }
         }
@@ -1343,21 +1410,14 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
 
     private func rewriteFinished(_ result: String) {
         guard let ctx = rewriteContext, rewritePanel.isShowing else { return }
-        if result == ctx.original {
+        if RewriteReview.identical(result, ctx.original) {
             rewritePanel.model.phase = .noChange
             rewriteDebug = (state: "noChange", original: ctx.original,
                             result: result, error: "")
         } else {
             rewritePanel.model.phase = .result
-            rewritePanel.model.result = result
-            // 记住改法: word-level changed pairs for the checkbox list
-            let pairs = RewriteDiff.wordPairs(
-                original: ctx.original, result: result
-            )
-            rewritePanel.model.rememberPairs = pairs
-            rewritePanel.model.rememberChecked = Set(pairs.indices)
+            rewritePanel.model.setResult(result)
             rewritePanel.model.rememberExpanded = false
-            rewritePanel.model.rememberSaved = false
             rewriteDebug = (state: "result", original: ctx.original,
                             result: result, error: "")
         }
@@ -1398,13 +1458,21 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
     private func rewriteAccept() {
         guard let ctx = rewriteContext,
               rewritePanel.model.phase == .result else { return }
-        let result = rewritePanel.model.result
-        guard let live = ctx.element.stringValue else {
+        guard let result = rewritePanel.model.reviewedText,
+              RewriteReview.identical(rewritePanel.model.original, ctx.original) else {
+            rewriteFailed(L10n.t(.errorOriginalChanged, settings.uiLanguage))
+            return
+        }
+        if RewriteReview.identical(result, ctx.original) {
+            rewritePanel.dismiss()
+            return // Keeping every original span is a no-op, with no AX write.
+        }
+        guard ctx.identity.isCurrent(), let live = TextDocument.read(ctx.element) else {
             rewriteFailed(L10n.t(.errorReadText, settings.uiLanguage))
             return
         }
         let units = Array(live.utf16)
-        guard ctx.end <= units.count,
+        guard live == ctx.baseline, ctx.end <= units.count,
               String(decoding: units[ctx.start..<ctx.end], as: UTF16.self)
                   == ctx.original
         else {
@@ -1422,7 +1490,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             replacement: normalized,
             baseOffset: ctx.baseOffset,
             label: "ai-rewrite",
-            log: log
+            log: log, identity: ctx.identity, expectedBaseline: ctx.baseline
         ) { [weak self] r in
             self?.lastReplacement = (r.path.rawValue, r.success)
             self?.writeDebugState()
@@ -1530,6 +1598,25 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             selectionCheckPressed()
             writeDebugState()
             return
+        case .rewriteKeepChange, .rewriteUseChange:
+            if let review = rewritePanel.model.review {
+                rewritePanel.model.selectEdit(cmd.index, accepted: cmd.action == .rewriteUseChange,
+                                              reviewID: review.id)
+            }
+            writeDebugState()
+            return
+        case .rewriteUseAll, .rewriteKeepAll:
+            rewritePanel.model.selectAllEdits(accepted: cmd.action == .rewriteUseAll)
+            writeDebugState()
+            return
+        case .pauseCurrentApp:
+            pauseCurrentApp()
+            writeDebugState()
+            return
+        case .resumeCurrentApp:
+            resumeCurrentApp()
+            writeDebugState()
+            return
         case .rewriteAccept:
             rewriteAccept()
             writeDebugState()
@@ -1587,7 +1674,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                 )
             startRewriteForFinding(key: key, finding: pf.finding, anchor: anchor)
         case .dismissCard, .dumpPanels,
-             .rewriteHotkey, .rewriteAccept, .rewriteCancel:
+             .rewriteHotkey, .rewriteAccept, .rewriteCancel,
+             .rewriteKeepChange, .rewriteUseChange, .rewriteUseAll, .rewriteKeepAll,
+             .pauseCurrentApp, .resumeCurrentApp:
             break // handled above
         }
         writeDebugState()
@@ -1601,6 +1690,24 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
 
     func toggleAutoUnderline() {
         settings.autoUnderline.toggle()
+    }
+
+    private func shouldCheckAutomatically(_ bundleId: String) -> Bool {
+        appPauses.permitsAutomaticCheck(bundleId, enabled: settings.isAppEnabled(bundleId))
+    }
+
+    func pauseCurrentApp(expectedBundleId: String? = nil) {
+        guard let bundleId = currentAppBundleId,
+              expectedBundleId == nil || expectedBundleId == bundleId,
+              AppGroup.group(for: bundleId) != .sensitive,
+              settings.isAppEnabled(bundleId) else { return }
+        appPauses.pause(bundleId)
+    }
+
+    func resumeCurrentApp(expectedBundleId: String? = nil) {
+        guard let bundleId = currentAppBundleId,
+              expectedBundleId == nil || expectedBundleId == bundleId else { return }
+        appPauses.resume(bundleId)
     }
 
     func toggleCurrentApp() {
@@ -1707,6 +1814,9 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
             let original: String
             let result: String
             let error: String
+            let finalText: String?
+            let acceptedEdits: [Int]
+            let changeCount: Int
         }
         /// Selection-check session snapshot for QA: always present;
         /// `active` false when no session is running.
@@ -1729,6 +1839,7 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
         let card: Card?
         let rewrite: Rewrite?
         let selectionCheck: SelectionCheck
+        let pausedApps: [String: TimeInterval]
     }
 
     private static let isoFormatter: ISO8601DateFormatter = {
@@ -1802,7 +1913,10 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                     state: $0.state,
                     original: $0.original,
                     result: $0.result,
-                    error: $0.error
+                    error: $0.error,
+                    finalText: rewritePanel.model.reviewedText,
+                    acceptedEdits: rewritePanel.model.acceptedEdits.sorted(),
+                    changeCount: rewritePanel.model.review?.edits.count ?? 0
                 )
             },
             selectionCheck: .init(
@@ -1814,7 +1928,8 @@ final class AppController: NSObject, ObservableObject, FocusTrackerDelegate {
                 empty: selectionSession.map {
                     $0.findings.isEmpty && $0.shownEmpty
                 } ?? false
-            )
+            ),
+            pausedApps: appPauses.deadlines.mapValues { $0.timeIntervalSince1970 }
         )
         guard let data = try? JSONEncoder().encode(dbg) else { return }
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
@@ -1839,6 +1954,12 @@ struct DebugCommand {
         case rewriteHotkey
         case rewriteAccept
         case rewriteCancel
+        case rewriteKeepChange
+        case rewriteUseChange
+        case rewriteUseAll
+        case rewriteKeepAll
+        case pauseCurrentApp
+        case resumeCurrentApp
     }
 
     let action: Action
