@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace DeAI.Automation;
@@ -77,6 +78,24 @@ public sealed class ForegroundTracker : IDisposable
     public void ObserveFocus(int pid, int[] id)
     {
         lock (history) history.ObserveFocus(pid, id, pid == Environment.ProcessId);
+    }
+    public string? CurrentProcessName()
+    {
+        lock (history)
+        {
+            var window = GetForegroundWindow();
+            if (window == IntPtr.Zero) return null;
+            history.Observe(window, OwnProcess(window));
+            var owner = OwnProcess(window) ? history.Owner : window;
+            if (owner == IntPtr.Zero || OwnProcess(owner)) return null;
+            GetWindowThreadProcessId(owner, out var pid);
+            try
+            {
+                var name = AppPolicy.ProcessName(pid);
+                return name.Length == 0 ? null : name;
+            }
+            catch (Exception error) when (error is ArgumentException or InvalidOperationException or Win32Exception) { return null; }
+        }
     }
     internal void Bind(ForegroundLease lease, int pid, int[] id)
     {

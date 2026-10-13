@@ -47,6 +47,11 @@ public static class RewriteScope
         if (string.IsNullOrWhiteSpace(result) || Breaks(result) != Breaks(original)) throw new InvalidOperationException("AI 改变了段落边界或返回空文本；请重新改写，未写回。");
         return result;
     }
+    public static void ValidateReviewedText(string text, string original)
+    {
+        if (ValidateResult(text, original) != text)
+            throw new InvalidOperationException("所选变更改变了段落边界；请重新选择，未写回。");
+    }
 }
 
 public sealed class RewriteClient : IDisposable

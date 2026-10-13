@@ -19,6 +19,8 @@ internal sealed class RewriteWindow : Window
     private readonly Skill skill;
     private readonly Preferences preferences;
     private readonly RewriteSnapshot snapshot;
+    private readonly RewriteReviewState review;
+    private readonly RewriteReviewView reviewView;
     private readonly string source;
     private readonly StackPanel body, state = new(), remember = new();
     private readonly TextBox output;
@@ -31,6 +33,7 @@ internal sealed class RewriteWindow : Window
         this.controller = controller; this.target = target; this.scope = scope; this.skill = skill;
         preferences = controller.Preferences; source = target.Original[scope.Start..scope.End];
         snapshot = new(preferences, controller.Lexicon, skill);
+        review = new(source);
         Title = "DeAI — " + Ui.L("AI 改写", "AI rewrite");
         body = Ui.Panel(this, Ui.RewriteWidth);
         ShowActivated = true;
@@ -44,7 +47,11 @@ internal sealed class RewriteWindow : Window
         var divider = Ui.Separator(); divider.Margin = new Thickness(0, 16, 0, 16); body.Children.Add(divider);
         output = Ui.Text("", "RewriteOutput", true); output.IsReadOnly = true; output.MinHeight = 20; output.MaxHeight = 160; output.Margin = new Thickness(0, 6, 0, 0);
         Ui.Color(output, Control.BackgroundProperty, "Background"); output.BorderThickness = new Thickness(0); output.Padding = new Thickness(0);
-        state.Children.Add(Ui.Label(Ui.L("改写", "Rewrite"), 11, "Muted")); state.Children.Add(progress); state.Children.Add(output); body.Children.Add(state);
+        reviewView = new(review, ReviewChanged);
+        state.Children.Add(Ui.Label(Ui.L("改写", "Rewrite"), 11, "Muted")); state.Children.Add(progress);
+        state.Children.Add(reviewView);
+        state.Children.Add(Ui.Label(Ui.L("最终预览", "Final preview"), 11, "Muted"));
+        state.Children.Add(output); body.Children.Add(state);
         status = Ui.Label("", 11, "Muted"); status.Margin = new Thickness(0, 8, 0, 12);
         AutomationProperties.SetAutomationId(status, "RewriteStatus"); body.Children.Add(status);
         body.Children.Add(remember);
@@ -55,11 +62,15 @@ internal sealed class RewriteWindow : Window
         {
             if (requesting || applying) return;
             try { ValidateSnapshot(); } catch (Exception error) { Ui.Error(error); return; }
+            var finalText = review.ReviewedText;
+            if (finalText == null) return;
+            if (review.KeepsOriginal) { Close(); return; }
+            try { RewriteScope.ValidateReviewedText(finalText, source); } catch (Exception error) { Ui.Error(error); return; }
             applying = true; RefreshActions(true);
-            if (await controller.Apply(target, scope.Start, scope.End, output.Text, ValidateSnapshot)) Close();
+            if (await controller.Apply(target, scope.Start, scope.End, finalText, ValidateSnapshot)) Close();
             else { applying = false; RefreshActions(); }
         }, "AcceptRewrite", "PrimaryButton");
-        copy = Ui.Button(Ui.L("复制", "Copy"), () => { if (output.Text.Length > 0) Clipboard.SetText(output.Text); }, "CopyRewrite");
+        copy = Ui.Button(Ui.L("复制", "Copy"), () => { if (review.ReviewedText is { Length: > 0 } text) Clipboard.SetText(text); }, "CopyRewrite");
         retry = Ui.Button(Ui.L("重试", "Retry"), async () => await Request(), "RetryRewrite");
         footer.Children.Add(Ui.Actions(send, apply, copy, retry, Ui.Button(Ui.L("取消", "Cancel"), Close, "CancelRewrite", "FlatButton")));
         Ui.PinPanel(this, body, header, footer);
@@ -73,7 +84,7 @@ internal sealed class RewriteWindow : Window
     private async Task Request()
     {
         if (requesting || applying) return;
-        requesting = true; requested = true; saved = false; output.Text = ""; remember.Children.Clear(); RefreshActions();
+        requesting = true; requested = true; saved = false; review.Reset(); reviewView.Refresh(); output.Text = ""; remember.Children.Clear(); RefreshActions();
         progress.Visibility = Visibility.Visible; Ui.Color(status, TextBlock.ForegroundProperty, "Muted");
         state.Visibility = Visibility.Visible; output.Visibility = Visibility.Collapsed;
         status.Text = Ui.L("正在改写… 取消会中止请求，原文不变。", "Rewriting… Cancel stops the request; source unchanged.");
@@ -86,12 +97,12 @@ internal sealed class RewriteWindow : Window
             using var client = new RewriteClient();
             var result = await client.RewriteAsync(preferences.Provider, key, source, skill, snapshot.Lexicon, cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
+            await controller.ValidateTarget(target);
             ValidateSnapshot();
-            output.Text = result; output.Visibility = Visibility.Visible;
+            review.SetResult(result); reviewView.Refresh(); output.Visibility = Visibility.Visible;
             status.Text = result == source ? Ui.L("原文已很自然，无需改写。", "Already natural. No changes needed.")
                 : target.CanWrite ? Ui.L("确认后将再次校验原文并替换。", "Replace rechecks the original before writing.")
                 : Ui.L("此目标只读；可复制结果，不能自动替换。", "Read-only target. Copy the result; automatic replacement is unavailable.");
-            BuildRemember(result);
         }
         catch (OperationCanceledException) { status.Text = Ui.L("已取消或超时，原文不变。", "Cancelled or timed out; source unchanged."); }
         catch (Exception error)
@@ -103,13 +114,22 @@ internal sealed class RewriteWindow : Window
     }
     private void RefreshActions(bool allDisabled = false)
     {
-        var hasResult = output.Text.Length > 0;
+        var hasResult = review.ReviewedText != null;
+        reviewView.IsEnabled = !allDisabled && !requesting;
         send.Visibility = requested ? Visibility.Collapsed : Visibility.Visible;
         send.IsEnabled = !allDisabled && !requesting;
-        apply.Visibility = hasResult && output.Text != source ? Visibility.Visible : Visibility.Collapsed;
-        apply.IsEnabled = !allDisabled && !requesting && target.CanWrite;
+        apply.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed;
+        apply.Content = review.KeepsOriginal ? Ui.L("保留原文", "Keep original") : Ui.L("替换", "Replace");
+        AutomationProperties.SetName(apply, (string)apply.Content);
+        apply.IsEnabled = !allDisabled && !requesting && (review.KeepsOriginal || target.CanWrite);
         copy.Visibility = hasResult ? Visibility.Visible : Visibility.Collapsed; copy.IsEnabled = !allDisabled && !requesting;
         retry.Visibility = requested ? Visibility.Visible : Visibility.Collapsed; retry.IsEnabled = !allDisabled && !requesting;
+    }
+    private void ReviewChanged()
+    {
+        output.Text = review.ReviewedText ?? "";
+        BuildRemember(output.Text);
+        RefreshActions();
     }
     private void ValidateSnapshot()
     {

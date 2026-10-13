@@ -20,6 +20,8 @@ internal sealed class Controller : IDisposable
     public SkillStore Skills { get; }
     public Preferences Preferences { get; private set; }
     public PersonalEntry[] Lexicon { get; private set; }
+    public AppPauseStore AppPauses { get; } = new();
+    public string? CurrentApp => foreground.CurrentProcessName();
     private readonly AutomationWorker worker;
     private readonly ForegroundTracker foreground = new();
     private readonly ConditionalWeakTable<TextTarget, ForegroundLease> leases = new();
@@ -48,14 +50,19 @@ internal sealed class Controller : IDisposable
         tray.MouseClick += (_, e) =>
         {
             if (e.Button is not (Forms.MouseButtons.Left or Forms.MouseButtons.Right)) return;
-            trayMenu?.Close(); trayMenu = new TrayWindow(this, current?.Target.ProcessName);
+            trayMenu?.Close(); trayMenu = new TrayWindow(this, CurrentApp);
             trayMenu.Closed += (_, _) => trayMenu = null; trayMenu.Show();
             var cursor = Forms.Cursor.Position; PanelBehavior.Place(trayMenu, new ScreenRect(cursor.X, cursor.Y, 1, 1));
         };
         tray.DoubleClick += (_, _) => ShowSuggestions();
         highlight.Hovered += finding => { if (rewrite == null) { Render(); suggestions.Select(finding); suggestions.Show(); } };
         hotkeys.Pressed += async isRewrite => await Scan(true, isRewrite);
-        timer.Tick += async (_, _) => { if (Preferences.AutoCheck && rewrite == null) await Scan(false, false); };
+        AppPauses.Changed += PausesChanged;
+        timer.Tick += async (_, _) =>
+        {
+            AppPauses.RefreshExpirations();
+            if (Preferences.AutoCheck && rewrite == null) await Scan(false, false);
+        };
     }
     public void Start()
     {
@@ -87,12 +94,34 @@ internal sealed class Controller : IDisposable
         suggestions.Render(null, Array.Empty<Finding>(), Ui.L("设置已保存。聚焦目标并按检查快捷键。", "Saved. Focus a target and press the check hotkey."));
     }
     public void SaveLexicon(PersonalEntry[] entries) { DataStore.ValidateLexicon(entries); Store.Save("lexicon.json", entries); Lexicon = entries; current = null; }
+    public void PauseApp(string process)
+    {
+        ValidateCurrentApp(process);
+        if (!Preferences.AllowsProcess(process) || Preferences.ExcludedApps.Contains(process, StringComparer.OrdinalIgnoreCase)) return;
+        AppPauses.Pause(process);
+    }
+    public void ResumeApp(string process) { ValidateCurrentApp(process); AppPauses.Resume(process); }
+    private void ValidateCurrentApp(string process)
+    {
+        if (!string.Equals(process, CurrentApp, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("当前应用已切换，请重新打开 DeAI 菜单。");
+    }
+    private void PausesChanged(string[] processes)
+    {
+        if (current == null || !processes.Contains(current.Target.ProcessName, StringComparer.OrdinalIgnoreCase)) return;
+        current = null; ignored.Clear(); highlight.Clear();
+        suggestions.Render(null, Array.Empty<Finding>(), Ui.L("应用检查状态已变化；临时暂停仅影响自动检查，手动快捷键仍可用。", "App check state changed. Temporary pauses affect automatic checks only; manual hotkeys still work."));
+        tray.Text = "DeAI";
+    }
     public async Task Scan(bool show, bool isRewrite)
     {
         if (busy || disposed) return;
         busy = true;
         try
         {
+            var pauseVersion = AppPauses.Version;
+            var process = CurrentApp;
+            if (!show && (process == null || !AppPauses.AllowsScan(process, false, pauseVersion))) return;
             var preferences = Preferences; var entries = Lexicon; var previous = current;
             var owner = GetForegroundWindow();
             var lease = foreground.Capture(owner);
@@ -100,11 +129,13 @@ internal sealed class Controller : IDisposable
             {
                 lease.Validate();
                 if (preferences != Preferences || entries != Lexicon) return null;
-                return TextTarget.Focused(automation, preferences.BrowsersEnabled, preferences.ExcludedApps, preferences.AllowsProcess, owner);
+                return TextTarget.Focused(automation, preferences.BrowsersEnabled, preferences.ExcludedApps,
+                    name => preferences.AllowsProcess(name) && AppPauses.AllowsScan(name, show, pauseVersion), owner);
             });
             var result = await worker.Run(_ =>
             {
                 if (target == null || target.WindowHandle != GetForegroundWindow()) return null;
+                if (!AppPauses.AllowsScan(target.ProcessName, show, pauseVersion)) return null;
                 lease.Validate();
                 target.BindFocus(lease);
                 leases.Add(target, lease);
@@ -113,6 +144,7 @@ internal sealed class Controller : IDisposable
                 return new CheckResult(target, findings);
             });
             if (preferences != Preferences || entries != Lexicon) return;
+            if (!show && (AppPauses.Version != pauseVersion || (result != null && !AppPauses.AllowsScan(result.Target.ProcessName, false, pauseVersion)))) return;
             lease.Validate();
             if (result == null)
             {
@@ -131,7 +163,7 @@ internal sealed class Controller : IDisposable
                 ValidateFocus(result.Target); result.Target.Validate();
                 return visible.SelectMany(f => result.Target.Locate(f.Start, f.End).Select(rect => new LocatedFinding(f, rect))).Take(64).ToArray();
             });
-            if (preferences == Preferences) highlight.Show(locations, preferences.Underline);
+            if (preferences == Preferences && AppPauses.AllowsScan(result.Target.ProcessName, show, pauseVersion)) highlight.Show(locations, preferences.Underline);
         }
         catch (Exception error) { highlight.Clear(); if (show) Ui.Error(error); else tray.Text = "DeAI — " + Ui.L("目标不可用", "target unavailable"); }
         finally { busy = false; }
@@ -220,7 +252,7 @@ internal sealed class Controller : IDisposable
     }
     public void Dispose()
     {
-        disposed = true; timer.Stop(); trayMenu?.Close(); rewrite?.Close(); settings?.Close(); suggestions.Exit(); highlight.Dispose(); hotkeys.Dispose(); tray.Dispose(); trayIcon.Dispose(); worker.Dispose(); foreground.Dispose();
+        disposed = true; timer.Stop(); AppPauses.Changed -= PausesChanged; trayMenu?.Close(); rewrite?.Close(); settings?.Close(); suggestions.Exit(); highlight.Dispose(); hotkeys.Dispose(); tray.Dispose(); trayIcon.Dispose(); worker.Dispose(); foreground.Dispose();
     }
     public IReadOnlyList<Finding> TestRules(string text) => checker.Check(text, Preferences.Options, Lexicon);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();

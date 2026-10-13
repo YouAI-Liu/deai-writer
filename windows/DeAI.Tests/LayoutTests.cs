@@ -27,6 +27,44 @@ internal static class LayoutTests
                 {
                     Ui.RefreshTheme(dark);
                     var theme = dark ? "dark" : "light";
+                    Check(theme + " review choices update the exact final text and reset cleanly", () =>
+                    {
+                        var model = new RewriteReviewState("He go home. We was late!");
+                        model.SetResult("He goes home. We were late!");
+                        var preview = "";
+                        var view = new RewriteReviewView(model, () => preview = model.ReviewedText!);
+                        view.Refresh(); Layout(view, 376);
+                        Equal("He goes home. We were late!", preview);
+                        var scroll = Find<ScrollViewer>(view);
+                        var choices = ((StackPanel)scroll.Content).Children.OfType<CheckBox>().ToArray();
+                        Equal(2, choices.Length);
+                        choices[1].IsChecked = false; Equal("He goes home. We was late!", preview);
+                        var actions = view.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().ToArray();
+                        actions[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Equal(true, model.KeepsOriginal);
+                        actions[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Equal("He goes home. We were late!", preview);
+                        model.SetResult("He went home. We were early!"); view.Refresh();
+                        choices[0].IsChecked = false; Equal("He went home. We were early!", preview);
+                        model.Reset(); view.Refresh(); Equal(Visibility.Collapsed, view.Visibility);
+                    });
+                    Check(theme + " long review choices wrap and scroll without overlap in both languages", () =>
+                    {
+                        foreach (var language in new[] { "zh", "en" })
+                        {
+                            Ui.Language = language;
+                            var model = new RewriteReviewState(string.Join("。", Enumerable.Repeat(new string('甲', 20), 16)));
+                            model.SetResult(string.Join("。", Enumerable.Repeat(new string('乙', 20), 16)));
+                            var view = new RewriteReviewView(model, () => { }); view.Refresh(); Layout(view, 376);
+                            var scroll = Find<ScrollViewer>(view);
+                            Require(scroll.ActualHeight <= 140 && scroll.ScrollableHeight > 0, "Review choices have no bounded scroll area");
+                            var choice = ((StackPanel)scroll.Content).Children.OfType<CheckBox>().First();
+                            var text = Find<TextBlock>(choice);
+                            var track = (Border)choice.Template.FindName("Track", choice);
+                            var label = text.TransformToAncestor(choice).TransformBounds(new Rect(text.RenderSize));
+                            var toggle = track.TransformToAncestor(choice).TransformBounds(new Rect(track.RenderSize));
+                            Require(text.ActualHeight > 23 && label.Right + 10 <= toggle.Left, "Review label clips or overlaps switch");
+                        }
+                        Ui.Language = "zh";
+                    });
                     if (nativeWindow)
                     {
                         Check(theme + " existing popup follows live and closed theme changes", () => NativeMenu(dark));
@@ -165,6 +203,9 @@ internal static class LayoutTests
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Top = SystemParameters.WorkArea.Bottom - 500;
         for (var i = 0; i < 2; i++) body.Children.Add(new TextBox { Text = new string('x', 350), TextWrapping = TextWrapping.Wrap, MinHeight = 20, MaxHeight = 160 });
+        var review = new RewriteReviewState(string.Join(" ", Enumerable.Repeat("bad", 100)));
+        review.SetResult(string.Join(" ", Enumerable.Repeat("good", 100)));
+        var reviewView = new RewriteReviewView(review, () => { }); reviewView.Refresh(); body.Children.Add(reviewView);
         var pairs = new StackPanel();
         for (var i = 0; i < 10; i++) pairs.Children.Add(new CheckBox { Content = new string('甲', 20) + " → " + new string('乙', 20), Margin = new Thickness(0, 4, 0, 4), FontSize = 11 });
         var expander = new Expander { Header = "Remember changes (10)", Content = pairs };

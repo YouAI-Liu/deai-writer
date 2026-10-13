@@ -27,6 +27,8 @@ public static class Program
         Check("Stale source rejected", () => Reject(() => TextSafety.Replace("bad", "edited", 0, 3, "good")));
         Check("Invalid range rejected", () => Reject(() => TextSafety.Replace("bad", "bad", 3, 0, "good")));
         FeatureTests.Run();
+        ReviewTests.Run();
+        PauseTests.Run();
         AppearanceTests.Run();
         LayoutTests.Run(args.Length == 1 && args[0] != "--unit");
         if (args.Length == 1 && args[0] == "--unit") { Console.WriteLine($"UIA fixture not run: unit-only mode. Total: {passed} passed, {failed} failed"); return failed == 0 ? 0 : 1; }

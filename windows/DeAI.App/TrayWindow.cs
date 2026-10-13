@@ -17,14 +17,44 @@ internal sealed class TrayWindow : Window
         panel.Children.Add(Ui.Row(Ui.Title("DeAI", 18), automatic));
         if (process != null)
         {
-            var active = new CheckBox { Content = Ui.L("最近检查：", "Last checked: ") + process, IsChecked = !controller.Preferences.ExcludedApps.Contains(process, StringComparer.OrdinalIgnoreCase), Margin = new Thickness(0, 16, 0, 10) };
-            active.Checked += (_, _) => SetApp(true); active.Unchecked += (_, _) => SetApp(false); panel.Children.Add(active);
+            var active = new CheckBox { Content = Ui.L("当前应用：", "Current app: ") + process, IsChecked = !controller.Preferences.ExcludedApps.Contains(process, StringComparer.OrdinalIgnoreCase), Margin = new Thickness(0, 16, 0, 10) };
+            panel.Children.Add(active);
+            var pauseState = Ui.Label("", 10, "Muted");
+            AutomationProperties.SetAutomationId(pauseState, "AppPauseStatus");
+            var pause = Ui.Button("", () =>
+            {
+                try
+                {
+                    if (controller.AppPauses.Deadline(process) != null) controller.ResumeApp(process);
+                    else controller.PauseApp(process);
+                }
+                catch (Exception error) { Ui.Error(error); }
+            }, "ToggleAppPause", "FlatButton");
+            pause.HorizontalAlignment = HorizontalAlignment.Left;
+            panel.Children.Add(pauseState); panel.Children.Add(pause);
+            var caption = Ui.Label(Ui.L("仅暂停自动检查，手动检查仍可用。", "Pauses automatic checks only; manual checks still work."), 10, "Muted");
+            caption.Margin = new Thickness(0, 4, 0, 8); panel.Children.Add(caption);
+            void RefreshPause()
+            {
+                var deadline = controller.AppPauses.Deadline(process);
+                pauseState.Text = deadline is { } until ? Ui.L("已暂停至 ", "Paused until ") + until.ToLocalTime().ToString("t") : "";
+                pauseState.Visibility = deadline == null ? Visibility.Collapsed : Visibility.Visible;
+                pause.Content = deadline != null ? Ui.L("恢复此应用自动检查", "Resume this app") : Ui.L("暂停此应用 15 分钟", "Pause this app for 15 minutes");
+                AutomationProperties.SetName(pause, (string)pause.Content);
+                pause.IsEnabled = controller.Preferences.AllowsProcess(process) && !controller.Preferences.ExcludedApps.Contains(process, StringComparer.OrdinalIgnoreCase);
+            }
+            void PausesChanged(string[] _) => RefreshPause();
+            controller.AppPauses.Changed += PausesChanged;
+            Closed += (_, _) => controller.AppPauses.Changed -= PausesChanged;
+            RefreshPause();
+            active.Checked += (_, _) => SetApp(true); active.Unchecked += (_, _) => SetApp(false);
             void SetApp(bool enabled)
             {
                 try
                 {
                     var apps = controller.Preferences.ExcludedApps.Where(p => !p.Equals(process, StringComparison.OrdinalIgnoreCase));
                     controller.SavePreferences(controller.Preferences with { ExcludedApps = enabled ? apps.ToArray() : apps.Append(process).ToArray() });
+                    RefreshPause();
                 }
                 catch (Exception error) { Ui.Error(error); }
             }
