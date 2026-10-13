@@ -89,6 +89,30 @@ internal static class FeatureTests
             history.Observe(IntPtr.Zero, false); history.Observe(a, false);
             Equal(false, history.Matches(a, version, a, false));
         });
+        Check("Tray context retains the host but still invalidates old write leases", () =>
+        {
+            var history = new FocusHistory(); var a = new IntPtr(1); var shell = new IntPtr(2); var ui = new IntPtr(3); var b = new IntPtr(4);
+            history.Observe(a, false); var version = history.Version;
+            history.Observe(shell, false, true); Equal(a, history.AppOwner); Equal(shell, history.Owner);
+            Equal(false, history.Matches(a, version, shell, false));
+            history.Observe(ui, true); Equal(a, history.AppOwner); Equal(false, history.Matches(a, version, ui, true));
+            history.Observe(a, false); Equal(false, history.Matches(a, version, a, false));
+            history.Observe(b, false); history.Observe(shell, false, true); history.Observe(ui, true); Equal(b, history.AppOwner);
+            var empty = new FocusHistory(); empty.Observe(shell, false, true); Equal(IntPtr.Zero, empty.AppOwner);
+        });
+        Check("Only system Explorer tray classes preserve app context", () =>
+        {
+            var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            foreach (var className in new[] { "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow" })
+            {
+                Equal(true, ForegroundTracker.IsTraySurface(className, path));
+                Equal(false, ForegroundTracker.IsTraySurface(className, Path.Combine(Path.GetTempPath(), "explorer.exe")));
+                Equal(false, ForegroundTracker.IsTraySurface(className, null));
+            }
+            Equal(false, ForegroundTracker.IsTraySurface("CabinetWClass", path));
+            Equal(false, ForegroundTracker.IsTraySurface("Progman", path));
+            Equal(false, ForegroundTracker.IsTraySurface("unknown", path));
+        });
         Check("Focus lease invalidates same-window Edit changes without reading text", () =>
         {
             var history = new FocusHistory(); history.ObserveFocus(1, new[] { 10, 20 }, false); var version = history.FocusVersion;
