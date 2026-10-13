@@ -183,6 +183,10 @@ enum L10n {
         // menu-bar panel
         case menuAutoUnderline
         case menuCheckInApp    // %@ app name
+        case menuPauseApp
+        case menuResumeApp
+        case menuPausedUntil  // %@ time
+        case menuPauseCaption
         case menuAppGroups
         case menuSettings
         case menuRuleTest
@@ -214,6 +218,17 @@ enum L10n {
         case appliedLabel
         case applyFailedLabel
         // rewrite panel
+        case reviewPreview
+        case reviewCount // %d total, %d accepted
+        case reviewUseAll
+        case reviewKeepAll
+        case reviewDone
+        case reviewCaption
+        case reviewWholePassage
+        case reviewAdded
+        case reviewDeleted
+        case reviewWhitespace
+        case reviewChangeA11y // %@ original, %@ revised
         case rewriteTitle
         case rewriting
         case originalLabel
@@ -428,6 +443,10 @@ enum L10n {
 
         .menuAutoUnderline: "自动下划线",
         .menuCheckInApp: "在 %@ 中检查",
+        .menuPauseApp: "暂停自动检查 15 分钟",
+        .menuResumeApp: "立即恢复自动检查",
+        .menuPausedUntil: "自动检查暂停至 %@",
+        .menuPauseCaption: "手动选中检查仍可用",
         .menuAppGroups: "应用类型",
         .menuSettings: "设置",
         .menuRuleTest: "规则测试窗口",
@@ -459,6 +478,17 @@ enum L10n {
         .appliedLabel: "已应用",
         .applyFailedLabel: "未能应用",
 
+        .reviewPreview: "最终文本",
+        .reviewCount: "%d 处改动 · %d 处采用",
+        .reviewUseAll: "全部采用",
+        .reviewKeepAll: "全部保留原文",
+        .reviewDone: "保留原文并关闭",
+        .reviewCaption: "取消勾选可保留该处原文，最终文本随选择更新",
+        .reviewWholePassage: "改动较大，按整段选择；可保留完整原文",
+        .reviewAdded: "新增内容",
+        .reviewDeleted: "删除此处",
+        .reviewWhitespace: "空白或换行",
+        .reviewChangeA11y: "采用此改动：%@ → %@",
         .rewriteTitle: "AI 改写",
         .rewriting: "AI 改写中…",
         .originalLabel: "原文",
@@ -671,6 +701,10 @@ enum L10n {
 
         .menuAutoUnderline: "Auto-underline",
         .menuCheckInApp: "Check in %@",
+        .menuPauseApp: "Pause automatic checks for 15 minutes",
+        .menuResumeApp: "Resume automatic checks now",
+        .menuPausedUntil: "Automatic checks paused until %@",
+        .menuPauseCaption: "Manual selection checks remain available",
         .menuAppGroups: "App types",
         .menuSettings: "Settings…",
         .menuRuleTest: "Rule Test Window",
@@ -702,6 +736,17 @@ enum L10n {
         .appliedLabel: "Applied",
         .applyFailedLabel: "Couldn't apply",
 
+        .reviewPreview: "Final text",
+        .reviewCount: "%d changes · %d accepted",
+        .reviewUseAll: "Accept all",
+        .reviewKeepAll: "Keep all original",
+        .reviewDone: "Keep original and close",
+        .reviewCaption: "Uncheck a change to keep its original text. The preview updates as you choose.",
+        .reviewWholePassage: "Large changes are reviewed as one passage. You can keep the full original.",
+        .reviewAdded: "Added text",
+        .reviewDeleted: "Delete this text",
+        .reviewWhitespace: "Whitespace or line break",
+        .reviewChangeA11y: "Accept change: %@ → %@",
         .rewriteTitle: "AI Rewrite",
         .rewriting: "Rewriting…",
         .originalLabel: "Original",

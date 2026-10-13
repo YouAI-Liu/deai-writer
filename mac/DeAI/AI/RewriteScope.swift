@@ -3,8 +3,8 @@ import Foundation
 
 /// What an "AI 改写" operates on: the selected range, or when the selection
 /// is collapsed, the paragraph containing the caret. All offsets are
-/// element-local UTF-16 code units; `selection` arrives in shared-document
-/// offsets (Word pages) and is translated by `baseOffset`.
+/// content-local UTF-16 code units. Word uses a complete document snapshot
+/// with baseOffset 0; partial snapshots must cover the entire selection.
 enum RewriteScope {
     /// Above this the caller shows "选中内容过长（上限 4000 字）".
     static let maxLength = 4000
@@ -28,10 +28,11 @@ enum RewriteScope {
         var s: Int
         var e: Int
         if let sel = selection, sel.length > 0 {
-            // real selection: shared → local, clamped to the element's slice
+            // A partial page read must not silently shorten the user's selection.
             let ls = sel.location - baseOffset
-            s = max(0, min(ls, len))
-            e = max(0, min(ls + sel.length, len))
+            guard ls >= 0, ls <= len, sel.length <= len - ls else { return nil }
+            s = ls
+            e = ls + sel.length
             guard s < e else { return nil }
         } else {
             // collapsed caret: expand to the enclosing paragraph

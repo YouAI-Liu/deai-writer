@@ -7,10 +7,24 @@ struct TextTarget {
     let element: AXElement
     let appBundleId: String
     let pid: pid_t
-    /// The element's start offset in the shared document text (0 for
-    /// full-text elements). Word pages expose their page slice via
-    /// `AXSharedCharacterRange` while all range APIs use shared offsets.
+    /// Content snapshot start in shared text: Word snapshots cover the
+    /// document and start at 0; page ranges belong to geometry only.
     let baseOffset: Int
+    let identity: TextDocumentIdentity
+
+    init(element: AXElement, appBundleId: String, pid: pid_t, baseOffset: Int) {
+        self.element = element
+        self.appBundleId = appBundleId
+        self.pid = pid
+        // Word content and selections use full-document UTF-16 offsets.
+        self.baseOffset = appBundleId == "com.microsoft.Word" ? 0 : baseOffset
+        self.identity = TextDocumentIdentity(element: element)
+    }
+
+    var text: String? { TextDocument.read(element) }
+    var textLength: Int? {
+        appBundleId == "com.microsoft.Word" ? element.numberOfCharacters : element.ownTextLength
+    }
 }
 
 /// Events the AppController consumes (always invoked on the main actor).
@@ -61,6 +75,7 @@ final class FocusTracker {
     private var safetyTimer: Timer?
     private var lastElementFrames: [CGRect] = []
     private var lastWindowFrame: CGRect?
+    private var resolutionID = UUID()
 
     // For the C callback — the tracker is a stable, app-lifetime object.
     private var refconProxy: UnsafeMutableRawPointer {
@@ -168,6 +183,7 @@ final class FocusTracker {
     }
 
     private func tearDownApp() {
+        resolutionID = UUID()
         if let observer {
             for el in observedElements {
                 for name in Self.elementNotifications + Self.appNotifications
@@ -270,11 +286,17 @@ final class FocusTracker {
               let bundleId = app.bundleIdentifier,
               let pid = currentApp?.processIdentifier else { return }
         let appEl = AXElement.application(pid: pid)
+        let requestID = UUID()
+        resolutionID = requestID
+        let requestedWindow: AXUIElement? = appEl.attribute(kAXFocusedWindowAttribute)
         let resolver = TextTargetResolver()
         resolver.resolveAsync(appElement: appEl, bundleId: bundleId) {
             [weak self] resolved in
-            guard let self, self.currentApp?.processIdentifier == pid else { return }
+            guard let self, self.currentApp?.processIdentifier == pid,
+                  self.resolutionID == requestID else { return }
             let win: AXUIElement? = appEl.attribute(kAXFocusedWindowAttribute)
+            guard let requestedWindow, let liveWindow = win,
+                  CFEqual(requestedWindow, liveWindow) else { return }
 
             // Prune subscriptions on elements that are gone (e.g. Word page
             // elements destroyed by reflow) — otherwise `observedElements`

@@ -315,14 +315,13 @@ final class RewriteScopeTests: XCTestCase {
         XCTAssertEqual(s?.end, 7)
     }
 
-    func testSelectionClamping() {
+    func testOutOfBoundsSelectionRejected() {
         let text = "abcde"
         let s = RewriteScope.compute(
             text: text, selection: CFRange(location: 2, length: 100),
             baseOffset: 0
         )
-        XCTAssertEqual(s?.start, 2)
-        XCTAssertEqual(s?.end, 5)
+        XCTAssertNil(s)
     }
 
     /// Word: selection in shared offsets, element text is a page slice.

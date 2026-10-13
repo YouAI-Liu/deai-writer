@@ -727,6 +727,7 @@ final class ReadmeCapture {
                         "I wanted to dig into the results of our Q3 campaign, "
                         + "which played a key role in our growth."
                 }
+                rewrite.setResult(rewrite.result)
                 rewrite.rememberPairs = RewriteDiff.wordPairs(
                     original: rewrite.original, result: rewrite.result)
                 rewrite.rememberChecked = Set(rewrite.rememberPairs.indices)
