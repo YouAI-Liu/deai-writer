@@ -1554,6 +1554,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deai-native"
+version = "0.1.0"
+dependencies = [
+ "deai-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "deai-wasm"
 version = "0.1.0"
 dependencies = [

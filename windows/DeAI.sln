@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeAI.App", "DeAI.App\DeAI.App.csproj", "{FED8FB4B-ABD6-4144-AA1D-91508AECE263}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeAI.Core", "DeAI.Core\DeAI.Core.csproj", "{3EF427A7-17D4-47B8-B84B-B0A2B335787F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeAI.Fixture", "DeAI.Fixture\DeAI.Fixture.csproj", "{38F782FD-544F-4522-993A-DE4E985616E2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeAI.Tests", "DeAI.Tests\DeAI.Tests.csproj", "{049A4415-903E-4E0C-88A8-02DEA4B2BE18}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FED8FB4B-ABD6-4144-AA1D-91508AECE263}.Debug|x64.ActiveCfg = Debug|x64
+		{FED8FB4B-ABD6-4144-AA1D-91508AECE263}.Debug|x64.Build.0 = Debug|x64
+		{FED8FB4B-ABD6-4144-AA1D-91508AECE263}.Release|x64.ActiveCfg = Release|x64
+		{FED8FB4B-ABD6-4144-AA1D-91508AECE263}.Release|x64.Build.0 = Release|x64
+		{3EF427A7-17D4-47B8-B84B-B0A2B335787F}.Debug|x64.ActiveCfg = Debug|x64
+		{3EF427A7-17D4-47B8-B84B-B0A2B335787F}.Debug|x64.Build.0 = Debug|x64
+		{3EF427A7-17D4-47B8-B84B-B0A2B335787F}.Release|x64.ActiveCfg = Release|x64
+		{3EF427A7-17D4-47B8-B84B-B0A2B335787F}.Release|x64.Build.0 = Release|x64
+		{38F782FD-544F-4522-993A-DE4E985616E2}.Debug|x64.ActiveCfg = Debug|x64
+		{38F782FD-544F-4522-993A-DE4E985616E2}.Debug|x64.Build.0 = Debug|x64
+		{38F782FD-544F-4522-993A-DE4E985616E2}.Release|x64.ActiveCfg = Release|x64
+		{38F782FD-544F-4522-993A-DE4E985616E2}.Release|x64.Build.0 = Release|x64
+		{049A4415-903E-4E0C-88A8-02DEA4B2BE18}.Debug|x64.ActiveCfg = Debug|x64
+		{049A4415-903E-4E0C-88A8-02DEA4B2BE18}.Debug|x64.Build.0 = Debug|x64
+		{049A4415-903E-4E0C-88A8-02DEA4B2BE18}.Release|x64.ActiveCfg = Release|x64
+		{049A4415-903E-4E0C-88A8-02DEA4B2BE18}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal

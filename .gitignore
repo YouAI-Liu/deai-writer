@@ -9,3 +9,6 @@ core/build/
 .build/
 mac/Local.xcconfig
 AGENTS.local.md
+windows/**/bin/
+windows/**/obj/
+windows/artifacts/
