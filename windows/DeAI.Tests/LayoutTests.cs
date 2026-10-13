@@ -46,6 +46,27 @@ internal static class LayoutTests
                         choices[0].IsChecked = false; Equal("He went home. We were early!", preview);
                         model.Reset(); view.Refresh(); Equal(Visibility.Collapsed, view.Visibility);
                     });
+                    Check(theme + " unchanged and reset review results synchronize the final preview", () =>
+                    {
+                        foreach (var language in new[] { "zh", "en" })
+                        {
+                            Ui.Language = language;
+                            var source = "😀 原文 A\r\nB e\u0301.\r\n保留第二段";
+                            var model = new RewriteReviewState(source);
+                            var preview = Ui.Text("", "RewriteOutput", true);
+                            var view = new RewriteReviewView(model, () => preview.Text = model.ReviewedText ?? "");
+                            view.Refresh(); Equal("", preview.Text);
+                            model.SetResult(source); view.Refresh(); Layout(view, 376);
+                            Equal(Visibility.Collapsed, view.Visibility); Equal(source, preview.Text);
+                            Equal(model.ReviewedText, preview.Text); Equal(true, model.KeepsOriginal);
+                            model.SetResult(source.Replace("原文", "修改", StringComparison.Ordinal)); view.Refresh();
+                            var oldChoice = ((StackPanel)Find<ScrollViewer>(view).Content).Children.OfType<CheckBox>().First();
+                            model.SetResult(source); view.Refresh(); oldChoice.IsChecked = false;
+                            Equal(source, preview.Text); Equal(0, model.Review!.Edits.Count);
+                            model.Reset(); view.Refresh(); Equal("", preview.Text);
+                        }
+                        Ui.Language = "zh";
+                    });
                     Check(theme + " long review choices wrap and scroll without overlap in both languages", () =>
                     {
                         foreach (var language in new[] { "zh", "en" })

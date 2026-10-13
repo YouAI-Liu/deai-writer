@@ -14,7 +14,7 @@ internal sealed class RewriteReviewView(RewriteReviewState model, Action changed
         Children.Clear();
         var review = model.Review;
         Visibility = review?.Edits.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (review == null || review.Edits.Count == 0) return;
+        if (review == null || review.Edits.Count == 0) { changed(); return; }
         var count = Ui.Label("", 11, "Muted");
         AutomationProperties.SetAutomationId(count, "ReviewCount");
         var choices = new List<CheckBox>();
